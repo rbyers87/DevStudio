@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>DevStudio - AI-Powered Development Environment</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -10,7 +11,19 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         
-        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        * {
+            box-sizing: border-box;
+        }
+        
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        
         .font-mono { font-family: 'JetBrains Mono', monospace; }
         
         /* Custom Scrollbar */
@@ -28,179 +41,406 @@
         .fade-in { animation: fadeIn 0.3s ease-out; }
         .ai-thinking { animation: pulse-glow 2s infinite; }
         
-        /* Glassmorphism */
-        .glass { background: rgba(30, 30, 30, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        /* Layout Fixes */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+        }
         
-        /* Split pane resizer */
-        .resizer { width: 4px; background: #374151; cursor: col-resize; transition: background 0.2s; }
-        .resizer:hover { background: #3b82f6; }
-        .resizer-horizontal { height: 4px; cursor: row-resize; }
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            min-height: 0; /* Critical for flex child scrolling */
+        }
         
-        /* Monaco Editor container */
-        #editor-container { height: 100%; width: 100%; }
+        .sidebar {
+            width: 256px;
+            min-width: 256px;
+            max-width: 256px;
+            display: flex;
+            flex-direction: column;
+            background: #1f2937;
+            border-right: 1px solid #374151;
+            overflow: hidden;
+        }
         
-        /* Preview iframe */
-        #preview-frame { border: none; width: 100%; height: 100%; background: white; }
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+            background: #111827;
+        }
+        
+        .preview-area {
+            width: 33.333%;
+            min-width: 300px;
+            max-width: 50%;
+            display: flex;
+            flex-direction: column;
+            background: #111827;
+            border-left: 1px solid #374151;
+        }
+        
+        /* Editor specific */
+        .editor-container {
+            flex: 1;
+            position: relative;
+            min-height: 0;
+            overflow: hidden;
+        }
+        
+        .monaco-editor {
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        
+        /* Chat panel */
+        .chat-panel {
+            height: 250px;
+            min-height: 200px;
+            max-height: 400px;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #374151;
+            background: #1f2937;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+        
+        /* Resizer */
+        .resizer {
+            width: 6px;
+            background: #374151;
+            cursor: col-resize;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .resizer:hover {
+            background: #3b82f6;
+        }
+        
+        .resizer::after {
+            content: '';
+            width: 2px;
+            height: 20px;
+            background: #6b7280;
+            border-radius: 1px;
+        }
         
         /* Version timeline */
-        .version-dot { width: 12px; height: 12px; border-radius: 50%; background: #4b5563; border: 2px solid #1f2937; transition: all 0.2s; }
+        .version-dot { 
+            width: 12px; 
+            height: 12px; 
+            border-radius: 50%; 
+            background: #4b5563; 
+            border: 2px solid #1f2937; 
+            transition: all 0.2s; 
+            flex-shrink: 0;
+        }
         .version-dot:hover { background: #3b82f6; transform: scale(1.2); }
         .version-dot.active { background: #10b981; border-color: #10b981; }
-        .version-line { width: 2px; background: #374151; flex: 1; margin: 4px 0; }
+        .version-line { 
+            width: 2px; 
+            background: #374151; 
+            flex: 1; 
+            margin: 4px 0; 
+            min-height: 20px;
+        }
         
         /* Chat bubbles */
-        .chat-bubble { max-width: 80%; padding: 12px 16px; border-radius: 12px; margin: 8px 0; word-wrap: break-word; }
-        .chat-bubble.user { background: #3b82f6; color: white; align-self: flex-end; margin-left: auto; }
-        .chat-bubble.ai { background: #374151; color: #e5e7eb; border: 1px solid #4b5563; }
+        .chat-bubble { 
+            max-width: 85%; 
+            padding: 10px 14px; 
+            border-radius: 12px; 
+            margin: 6px 0; 
+            word-wrap: break-word;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .chat-bubble.user { 
+            background: #3b82f6; 
+            color: white; 
+            align-self: flex-end; 
+            margin-left: auto; 
+        }
+        .chat-bubble.ai { 
+            background: #374151; 
+            color: #e5e7eb; 
+            border: 1px solid #4b5563; 
+        }
         
         /* Loading spinner */
-        .spinner { border: 2px solid #374151; border-top: 2px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        .spinner { 
+            border: 3px solid #374151; 
+            border-top: 3px solid #3b82f6; 
+            border-radius: 50%; 
+            width: 24px; 
+            height: 24px; 
+            animation: spin 1s linear infinite; 
+        }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         /* Provider badges */
-        .provider-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .provider-badge { 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 4px; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-size: 11px; 
+            font-weight: 600; 
+        }
         .provider-openai { background: #10a37f; color: white; }
         .provider-anthropic { background: #d4a574; color: #1a1a1a; }
         .provider-google { background: #4285f4; color: white; }
         .provider-deepseek { background: #4f46e5; color: white; }
         .provider-local { background: #6b7280; color: white; }
+        
+        /* Preview iframe */
+        #preview-frame { 
+            border: none; 
+            width: 100%; 
+            height: 100%; 
+            background: white;
+            display: block;
+        }
+        
+        /* Fix for empty state */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #111827;
+            z-index: 10;
+        }
+        
+        /* Tabs */
+        .tabs-container {
+            height: 36px;
+            min-height: 36px;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+            background: #1f2937;
+            border-bottom: 1px solid #374151;
+        }
+        
+        .tab {
+            height: 36px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+            border-right: 1px solid #374151;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            min-width: 100px;
+            max-width: 200px;
+        }
+        
+        /* File tree */
+        .file-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+        
+        /* Modal fixes */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .modal-content {
+            background: #1f2937;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            max-width: 500px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        /* Ensure inputs don't break layout */
+        input, select, textarea {
+            max-width: 100%;
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+<body class="bg-gray-900 text-gray-100">
 
-    <!-- Header -->
-    <header class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0 z-50">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <i class="fas fa-code text-white text-sm"></i>
-            </div>
-            <h1 class="font-semibold text-lg tracking-tight">DevStudio</h1>
-            <span class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-400">v1.0</span>
-            <span id="active-provider" class="provider-badge provider-openai hidden">OpenAI</span>
-        </div>
-
-        <div class="flex items-center gap-3">
-            <button onclick="app.toggleSettings()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="Settings">
-                <i class="fas fa-cog text-gray-400"></i>
-            </button>
-            <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
-                <i class="fab fa-github"></i>
-                <span id="github-status">Connect GitHub</span>
-            </button>
-            <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-sm font-medium">
-                <i class="fas fa-cloud-upload-alt"></i>
-                Sync
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Content -->
-    <div class="flex-1 flex overflow-hidden">
-        
-        <!-- Left Sidebar: File Explorer -->
-        <aside class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col shrink-0">
-            <div class="p-3 border-b border-gray-700 flex items-center justify-between">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Explorer</span>
-                <div class="flex gap-1">
-                    <button onclick="app.createFile()" class="p-1.5 hover:bg-gray-700 rounded" title="New File">
-                        <i class="fas fa-file-medical text-xs text-gray-400"></i>
-                    </button>
-                    <button onclick="app.createFolder()" class="p-1.5 hover:bg-gray-700 rounded" title="New Folder">
-                        <i class="fas fa-folder-plus text-xs text-gray-400"></i>
-                    </button>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                    <i class="fas fa-code text-white text-sm"></i>
                 </div>
+                <h1 class="font-semibold text-lg tracking-tight">DevStudio</h1>
+                <span class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-400">v1.0</span>
+                <span id="active-provider" class="provider-badge provider-openai hidden">OpenAI</span>
             </div>
-            <div id="file-tree" class="flex-1 overflow-y-auto p-2 text-sm">
-                <!-- File tree rendered here -->
+
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="Settings">
+                    <i class="fas fa-cog text-gray-400"></i>
+                </button>
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                    <i class="fab fa-github"></i>
+                    <span id="github-status" class="truncate max-w-[150px]">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-sm font-medium">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Sync</span>
+                </button>
             </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
             
-            <!-- Version History Panel -->
-            <div class="h-1/3 border-t border-gray-700 flex flex-col">
-                <div class="p-3 border-b border-gray-700 flex items-center justify-between">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
-                    <button onclick="app.createCheckpoint()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
-                        <i class="fas fa-save mr-1"></i>Save
-                    </button>
-                </div>
-                <div id="version-list" class="flex-1 overflow-y-auto p-3 space-y-2">
-                    <!-- Versions rendered here -->
-                </div>
-            </div>
-        </aside>
-
-        <!-- Center: Editor -->
-        <div class="flex-1 flex flex-col min-w-0">
-            <!-- Tabs -->
-            <div id="tabs-container" class="h-9 bg-gray-800 border-b border-gray-700 flex items-center overflow-x-auto">
-                <!-- Tabs rendered here -->
-            </div>
-            
-            <!-- Editor Area -->
-            <div class="flex-1 relative">
-                <div id="editor-container"></div>
-                <div id="empty-state" class="absolute inset-0 flex items-center justify-center bg-gray-900 hidden">
-                    <div class="text-center text-gray-500">
-                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
-                        <p>Select a file to start editing</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- AI Chat Panel (Collapsible) -->
-            <div id="chat-panel" class="h-64 bg-gray-800 border-t border-gray-700 flex flex-col transition-all duration-300">
-                <div class="h-8 bg-gray-750 border-b border-gray-700 flex items-center justify-between px-3 cursor-pointer" onclick="app.toggleChat()">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-robot text-blue-400 text-xs"></i>
-                        <span class="text-xs font-medium">AI Assistant</span>
-                        <span id="ai-status" class="text-[10px] bg-gray-700 px-1.5 rounded text-gray-400">Ready</span>
-                        <span id="current-model-badge" class="text-[10px] bg-blue-900 text-blue-200 px-1.5 rounded hidden">GPT-4</span>
-                    </div>
-                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
-                </div>
-                <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2">
-                    <div class="chat-bubble ai">
-                        <p class="text-sm">Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?</p>
-                    </div>
-                </div>
-                <div class="p-3 border-t border-gray-700 bg-gray-850">
-                    <div class="flex gap-2">
-                        <input type="text" id="chat-input" placeholder="Ask me to modify code, explain something, or fix bugs..." 
-                               class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                               onkeypress="if(event.key==='Enter') app.sendMessage()">
-                        <button onclick="app.sendMessage()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                            <i class="fas fa-paper-plane"></i>
+            <!-- Left Sidebar: File Explorer -->
+            <aside class="sidebar">
+                <div class="p-3 border-b border-gray-700 flex items-center justify-between shrink-0">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Explorer</span>
+                    <div class="flex gap-1">
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-gray-700 rounded" title="New File">
+                            <i class="fas fa-file-medical text-xs text-gray-400"></i>
+                        </button>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-gray-700 rounded" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs text-gray-400"></i>
                         </button>
                     </div>
-                    <div class="flex gap-2 mt-2">
-                        <button onclick="app.quickAction('explain')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Explain Code</button>
-                        <button onclick="app.quickAction('fix')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
-                        <button onclick="app.quickAction('optimize')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Optimize</button>
-                        <button onclick="app.quickAction('document')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
+                </div>
+                <div id="file-tree" class="file-tree">
+                    <!-- File tree rendered here -->
+                </div>
+                
+                <!-- Version History Panel -->
+                <div class="h-48 border-t border-gray-700 flex flex-col shrink-0">
+                    <div class="p-3 border-b border-gray-700 flex items-center justify-between shrink-0">
+                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
+                        <button onclick="app.createCheckpoint()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
+                            <i class="fas fa-save mr-1"></i>Save
+                        </button>
+                    </div>
+                    <div id="version-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+                        <!-- Versions rendered here -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: Editor -->
+            <div class="editor-area">
+                <!-- Tabs -->
+                <div id="tabs-container" class="tabs-container">
+                    <!-- Tabs rendered here -->
+                </div>
+                
+                <!-- Editor Area -->
+                <div class="editor-container">
+                    <div id="monaco-editor"></div>
+                    <div id="empty-state" class="empty-state hidden">
+                        <div class="text-center text-gray-500">
+                            <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                            <p>Select a file to start editing</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Chat Panel -->
+                <div id="chat-panel" class="chat-panel">
+                    <div class="h-8 bg-gray-750 border-b border-gray-700 flex items-center justify-between px-3 cursor-pointer shrink-0" onclick="app.toggleChat()">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-robot text-blue-400 text-xs"></i>
+                            <span class="text-xs font-medium">AI Assistant</span>
+                            <span id="ai-status" class="text-[10px] bg-gray-700 px-1.5 rounded text-gray-400">Ready</span>
+                            <span id="current-model-badge" class="text-[10px] bg-blue-900 text-blue-200 px-1.5 rounded hidden">GPT-4</span>
+                        </div>
+                        <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                    </div>
+                    <div id="chat-messages" class="chat-messages space-y-2">
+                        <div class="chat-bubble ai">
+                            <p>Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?</p>
+                        </div>
+                    </div>
+                    <div class="p-3 border-t border-gray-700 bg-gray-850 shrink-0">
+                        <div class="flex gap-2">
+                            <input type="text" id="chat-input" placeholder="Ask me to modify code..." 
+                                   class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                                   onkeypress="if(event.key==='Enter') app.sendMessage()">
+                            <button onclick="app.sendMessage()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="flex gap-2 mt-2 flex-wrap">
+                            <button onclick="app.quickAction('explain')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Explain</button>
+                            <button onclick="app.quickAction('fix')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
+                            <button onclick="app.quickAction('optimize')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Optimize</button>
+                            <button onclick="app.quickAction('document')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Resizer -->
-        <div class="resizer" id="resizer"></div>
+            <!-- Resizer -->
+            <div class="resizer" id="resizer"></div>
 
-        <!-- Right: Live Preview -->
-        <div class="w-1/3 min-w-[300px] bg-gray-900 flex flex-col">
-            <div class="h-9 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-3">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
-                <div class="flex gap-2">
-                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-gray-700 rounded" title="Refresh">
-                        <i class="fas fa-sync-alt text-xs text-gray-400"></i>
-                    </button>
-                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-gray-700 rounded" title="Open in New Tab">
-                        <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
-                    </button>
+            <!-- Right: Live Preview -->
+            <div class="preview-area" id="preview-panel">
+                <div class="h-9 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-3 shrink-0">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
+                    <div class="flex gap-2">
+                        <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-gray-700 rounded" title="Refresh">
+                            <i class="fas fa-sync-alt text-xs text-gray-400"></i>
+                        </button>
+                        <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-gray-700 rounded" title="Open in New Tab">
+                            <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
+                        </button>
+                    </div>
                 </div>
-            </div>
-            <div class="flex-1 bg-white relative">
-                <iframe id="preview-frame"></iframe>
-                <div id="preview-loading" class="absolute inset-0 bg-gray-900 flex items-center justify-center hidden">
-                    <div class="spinner"></div>
+                <div class="flex-1 relative bg-white min-h-0">
+                    <iframe id="preview-frame"></iframe>
+                    <div id="preview-loading" class="absolute inset-0 bg-gray-900 flex items-center justify-center hidden">
+                        <div class="spinner"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -209,8 +449,8 @@
     <!-- Modals -->
     
     <!-- GitHub Connect Modal -->
-    <div id="github-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-        <div class="bg-gray-800 rounded-xl p-6 w-96 border border-gray-700 shadow-2xl">
+    <div id="github-modal" class="modal-overlay hidden">
+        <div class="modal-content p-6">
             <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
                 <i class="fab fa-github"></i> Connect to GitHub
             </h2>
@@ -233,8 +473,8 @@
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-        <div class="bg-gray-800 rounded-xl p-6 w-[500px] border border-gray-700 shadow-2xl max-h-[80vh] overflow-y-auto">
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content p-6">
             <h2 class="text-xl font-semibold mb-4">Settings</h2>
             
             <div class="space-y-6">
@@ -256,7 +496,7 @@
                         <div>
                             <label class="block text-sm text-gray-400 mb-1">API Key</label>
                             <input type="password" id="ai-api-key" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="sk-...">
-                            <p class="text-xs text-gray-500 mt-1" id="api-key-help">Get your key from platform.deepseek.com for Deepseek</p>
+                            <p class="text-xs text-gray-500 mt-1" id="api-key-help">Get your key from platform.openai.com</p>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-400 mb-1">Model</label>
@@ -297,7 +537,7 @@
                 <div>
                     <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Project</h3>
                     <button onclick="app.exportProject()" class="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm transition-colors mb-2">
-                        <i class="fas fa-download mr-2"></i>Export Project as ZIP
+                        <i class="fas fa-download mr-2"></i>Export Project
                     </button>
                     <button onclick="app.clearAllData()" class="w-full bg-red-900/50 hover:bg-red-900/80 text-red-200 py-2 rounded-lg text-sm transition-colors">
                         <i class="fas fa-trash mr-2"></i>Clear All Data
@@ -310,8 +550,8 @@
     </div>
 
     <!-- New File Modal -->
-    <div id="new-file-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
-        <div class="bg-gray-800 rounded-xl p-6 w-80 border border-gray-700 shadow-2xl">
+    <div id="new-file-modal" class="modal-overlay hidden">
+        <div class="modal-content p-6" style="max-width: 320px;">
             <h3 class="text-lg font-semibold mb-3">Create New File</h3>
             <input type="text" id="new-file-name" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-500" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
             <div class="flex gap-2">
@@ -332,8 +572,8 @@
             ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
             settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
             chatCollapsed: false,
+            chatHeight: 250,
             
-            // Provider configurations
             providers: {
                 openai: {
                     name: 'OpenAI',
@@ -400,19 +640,41 @@
                 if (this.github.connected) {
                     document.getElementById('github-status').textContent = this.github.repo;
                 }
+                
+                // Handle window resize properly
+                window.addEventListener('resize', () => {
+                    this.handleResize();
+                });
+                
+                // Initial layout
+                setTimeout(() => this.handleResize(), 100);
+            },
+
+            handleResize() {
+                if (this.editor) {
+                    this.editor.layout();
+                }
             },
 
             initMonaco() {
-                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                require.config({ 
+                    paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }
+                });
                 
                 require(['vs/editor/editor.main'], () => {
-                    this.editor = monaco.editor.create(document.getElementById('editor-container'), {
+                    const editorContainer = document.getElementById('monaco-editor');
+                    
+                    // Ensure container has proper dimensions
+                    editorContainer.style.width = '100%';
+                    editorContainer.style.height = '100%';
+                    
+                    this.editor = monaco.editor.create(editorContainer, {
                         value: '',
                         language: 'javascript',
                         theme: this.settings.theme,
                         fontSize: this.settings.fontSize,
                         wordWrap: this.settings.wordWrap ? 'on' : 'off',
-                        automaticLayout: true,
+                        automaticLayout: true, // This helps with resizing
                         minimap: { enabled: true },
                         scrollBeyondLastLine: false,
                         roundedSelection: false,
@@ -422,7 +684,8 @@
                         matchBrackets: 'always',
                         quickSuggestions: true,
                         suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnEnter: 'on'
+                        acceptSuggestionOnEnter: 'on',
+                        fixedOverflowWidgets: true // Prevents widgets from breaking layout
                     });
 
                     // Auto-update preview on change with debounce
@@ -439,6 +702,9 @@
                             }, 1000);
                         }
                     });
+                    
+                    // Force layout after init
+                    setTimeout(() => this.editor.layout(), 100);
                 });
             },
 
@@ -458,14 +724,12 @@
                     modelBadge.classList.remove('hidden');
                 }
                 
-                // Update help text
                 const helpText = document.getElementById('provider-help');
                 const apiKeyHelp = document.getElementById('api-key-help');
                 if (helpText) helpText.textContent = provider.helpText;
                 if (apiKeyHelp) apiKeyHelp.textContent = provider.helpText;
             },
 
-            // File Management
             createFile() {
                 document.getElementById('new-file-modal').classList.remove('hidden');
                 document.getElementById('new-file-name').focus();
@@ -496,6 +760,7 @@
                 if (this.files[filename]?.type === 'folder') return;
                 
                 this.currentFile = filename;
+                document.getElementById('empty-state').classList.add('hidden');
                 
                 if (this.editor) {
                     const model = monaco.editor.createModel(
@@ -503,6 +768,8 @@
                         this.getLanguage(filename)
                     );
                     this.editor.setModel(model);
+                    // Force layout after opening file
+                    setTimeout(() => this.editor.layout(), 50);
                 }
                 
                 this.renderTabs();
@@ -521,7 +788,7 @@
                     if (this.currentFile) {
                         this.openFile(this.currentFile);
                     } else {
-                        this.editor.setValue('');
+                        if (this.editor) this.editor.setValue('');
                         document.getElementById('empty-state').classList.remove('hidden');
                     }
                 }
@@ -544,22 +811,21 @@
                 return filename.endsWith('.html') || filename.endsWith('.htm');
             },
 
-            // UI Rendering
             renderFileTree() {
                 const container = document.getElementById('file-tree');
                 container.innerHTML = '';
                 
                 Object.keys(this.files).sort().forEach(filename => {
                     const div = document.createElement('div');
-                    div.className = `flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${this.currentFile === filename ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-gray-700 text-gray-300'}`;
+                    div.className = `file-item ${this.currentFile === filename ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-gray-700 text-gray-300'}`;
                     
                     const isFolder = this.files[filename].type === 'folder';
                     const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
                     
                     div.innerHTML = `
                         <i class="fas ${icon} w-4 text-center text-xs"></i>
-                        <span class="flex-1 truncate text-sm">${filename}</span>
-                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 hover:text-red-400"><i class="fas fa-times text-xs"></i></button>` : ''}
+                        <span class="flex-1 truncate">${filename}</span>
+                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 hover:text-red-400 p-1"><i class="fas fa-times text-xs"></i></button>` : ''}
                     `;
                     
                     div.onclick = () => this.openFile(filename);
@@ -582,18 +848,17 @@
                 
                 Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
                     const tab = document.createElement('div');
-                    tab.className = `flex items-center gap-2 px-3 py-2 border-r border-gray-700 cursor-pointer text-sm min-w-[100px] max-w-[200px] ${this.currentFile === filename ? 'bg-gray-700 text-white border-t-2 border-t-blue-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'}`;
+                    tab.className = `tab ${this.currentFile === filename ? 'bg-gray-700 text-white border-t-2 border-t-blue-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'}`;
                     tab.innerHTML = `
                         <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
                         <span class="flex-1 truncate">${filename}</span>
-                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1"><i class="fas fa-times text-xs"></i></button>
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1 p-1"><i class="fas fa-times text-xs"></i></button>
                     `;
                     tab.onclick = () => this.openFile(filename);
                     container.appendChild(tab);
                 });
             },
 
-            // Version Control
             createCheckpoint() {
                 const checkpoint = {
                     id: Date.now(),
@@ -638,8 +903,8 @@
                             <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
                             ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
                         </div>
-                        <div class="flex-1 pb-4" onclick="app.restoreVersion(${version.id})">
-                            <div class="text-xs font-medium text-gray-300 group-hover:text-blue-400 transition-colors">${version.message}</div>
+                        <div class="flex-1 pb-4 min-w-0" onclick="app.restoreVersion(${version.id})">
+                            <div class="text-xs font-medium text-gray-300 group-hover:text-blue-400 transition-colors truncate">${version.message}</div>
                             <div class="text-[10px] text-gray-500">${new Date(version.timestamp).toLocaleString()}</div>
                         </div>
                     `;
@@ -647,7 +912,6 @@
                 });
             },
 
-            // Preview
             updatePreview() {
                 if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
                 
@@ -671,7 +935,6 @@
                 }
             },
 
-            // AI Chat
             async sendMessage() {
                 const input = document.getElementById('chat-input');
                 const message = input.value.trim();
@@ -688,10 +951,10 @@
                     this.addChatMessage(response, 'ai');
                     
                     if (response.includes('```')) {
-                        this.addChatMessage('Would you like me to apply these changes to the current file? Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button>', 'ai');
+                        this.addChatMessage('Would you like me to apply these changes? <button onclick="app.applyAIChanges()" class="text-blue-400 underline hover:text-blue-300">Apply Changes</button>', 'ai');
                     }
                 } catch (error) {
-                    this.addChatMessage('Sorry, I encountered an error: ' + error.message, 'ai');
+                    this.addChatMessage('Error: ' + error.message, 'ai');
                 } finally {
                     document.getElementById('ai-status').textContent = 'Ready';
                     document.getElementById('ai-status').classList.remove('ai-thinking');
@@ -712,7 +975,6 @@
                 let url, body, headers;
 
                 if (provider === 'openai' || provider === 'deepseek') {
-                    // Deepseek uses OpenAI-compatible format
                     url = config.baseUrl;
                     headers = { 
                         'Authorization': `${config.authPrefix}${apiKey}`, 
@@ -748,7 +1010,6 @@
                         generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
                     });
                 } else {
-                    // Local/custom endpoint
                     url = endpoint;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
                     body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
@@ -763,17 +1024,9 @@
                 
                 const data = await response.json();
                 
-                // Parse different response formats
-                if (provider === 'anthropic') {
-                    return data.content[0].text;
-                } else if (provider === 'google') {
-                    return data.candidates[0].content.parts[0].text;
-                } else if (provider === 'deepseek' || provider === 'openai') {
-                    return data.choices[0].message.content;
-                } else {
-                    // Local/OpenAI compatible
-                    return data.choices[0].message.content;
-                }
+                if (provider === 'anthropic') return data.content[0].text;
+                if (provider === 'google') return data.candidates[0].content.parts[0].text;
+                return data.choices[0].message.content;
             },
 
             addChatMessage(text, sender) {
@@ -815,17 +1068,20 @@
                 this.chatCollapsed = !this.chatCollapsed;
                 
                 if (this.chatCollapsed) {
+                    this.chatHeight = panel.offsetHeight;
                     panel.style.height = '32px';
+                    panel.style.flex = 'none';
                     icon.classList.remove('fa-chevron-down');
                     icon.classList.add('fa-chevron-up');
                 } else {
-                    panel.style.height = '256px';
+                    panel.style.height = this.chatHeight + 'px';
+                    panel.style.flex = 'none';
                     icon.classList.remove('fa-chevron-up');
                     icon.classList.add('fa-chevron-down');
+                    setTimeout(() => this.handleResize(), 300);
                 }
             },
 
-            // GitHub Integration
             showGitHubModal() {
                 document.getElementById('github-modal').classList.remove('hidden');
                 if (this.github.token) {
@@ -945,7 +1201,6 @@
                 this.showToast(`Synced ${successCount} files to GitHub!`);
             },
 
-            // Settings
             toggleSettings() {
                 document.getElementById('settings-modal').classList.remove('hidden');
             },
@@ -956,7 +1211,6 @@
                 
                 document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
                 
-                // Auto-fill default model if empty
                 const modelInput = document.getElementById('ai-model');
                 if (!modelInput.value || modelInput.value === this.providers[this.ai.provider]?.model) {
                     modelInput.value = config.model;
@@ -994,7 +1248,6 @@
                 this.saveToStorage();
             },
 
-            // Storage
             saveToStorage() {
                 const data = {
                     files: this.files,
@@ -1104,7 +1357,6 @@ console.log('Hello from DevStudio!');`,
                 }
             },
 
-            // Utilities
             closeModal(id) {
                 document.getElementById(id).classList.add('hidden');
             },
@@ -1119,30 +1371,53 @@ console.log('Hello from DevStudio!');`,
 
             setupResizer() {
                 const resizer = document.getElementById('resizer');
-                const left = resizer.previousElementSibling;
-                const right = resizer.nextElementSibling;
+                const left = resizer.previousElementSibling; // Editor area
+                const right = resizer.nextElementSibling; // Preview panel
+                const sidebar = document.querySelector('.sidebar');
                 
                 let x = 0;
                 let leftWidth = 0;
                 
                 const mouseDownHandler = function(e) {
                     x = e.clientX;
+                    const containerWidth = resizer.parentNode.getBoundingClientRect().width;
+                    const sidebarWidth = sidebar.offsetWidth;
                     leftWidth = left.getBoundingClientRect().width;
+                    
                     document.addEventListener('mousemove', mouseMoveHandler);
                     document.addEventListener('mouseup', mouseUpHandler);
                     resizer.classList.add('bg-blue-500');
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
                 };
                 
                 const mouseMoveHandler = function(e) {
                     const dx = e.clientX - x;
-                    const newLeftWidth = ((leftWidth + dx) * 100) / resizer.parentNode.getBoundingClientRect().width;
-                    left.style.width = `${newLeftWidth}%`;
+                    const newLeftWidth = leftWidth + dx;
+                    const containerWidth = resizer.parentNode.getBoundingClientRect().width;
+                    const sidebarWidth = sidebar.offsetWidth;
+                    
+                    // Calculate percentages
+                    const availableWidth = containerWidth - sidebarWidth - 6; // 6px for resizer
+                    const leftPercent = (newLeftWidth / availableWidth) * 100;
+                    
+                    if (leftPercent > 20 && leftPercent < 80) {
+                        left.style.width = leftPercent + '%';
+                        right.style.width = (100 - leftPercent) + '%';
+                    }
                 };
                 
                 const mouseUpHandler = function() {
                     document.removeEventListener('mousemove', mouseMoveHandler);
                     document.removeEventListener('mouseup', mouseUpHandler);
                     resizer.classList.remove('bg-blue-500');
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                    
+                    // Trigger editor resize
+                    if (app.editor) {
+                        app.editor.layout();
+                    }
                 };
                 
                 resizer.addEventListener('mousedown', mouseDownHandler);
@@ -1159,10 +1434,6 @@ console.log('Hello from DevStudio!');`,
 
         // Initialize on load
         window.addEventListener('DOMContentLoaded', () => app.init());
-        
-        window.addEventListener('resize', () => {
-            if (app.editor) app.editor.layout();
-        });
     </script>
 </body>
 </html>
