@@ -626,28 +626,42 @@
             // Update folder selector dropdown with all folders
             updateFolderSelector() {
                 const select = document.getElementById('folder-select');
+                if (!select) return;
+                
                 // Keep the root option
                 select.innerHTML = '<option value="">📁 Root</option>';
                 
                 // Get all unique folders from files
                 const folders = new Set();
+                
                 Object.keys(this.files).forEach(path => {
+                    // Add explicit folder entries
                     if (this.files[path].type === 'folder') {
                         folders.add(path);
-                    } else {
-                        // Extract folder from file path
-                        const lastSlash = path.lastIndexOf('/');
-                        if (lastSlash > 0) {
-                            const folder = path.substring(0, lastSlash + 1);
-                            folders.add(folder);
+                    }
+                    
+                    // Also extract ALL parent folders from file paths (for old data compatibility)
+                    if (path.includes('/')) {
+                        const parts = path.split('/');
+                        let currentPath = '';
+                        // Build up folder paths from each part except the last (filename)
+                        for (let i = 0; i < parts.length - 1; i++) {
+                            if (parts[i]) {
+                                currentPath += parts[i] + '/';
+                                folders.add(currentPath);
+                            }
                         }
                     }
                 });
                 
+                // Remove root if it was added
+                folders.delete('');
+                folders.delete('/');
+                
                 // Sort folders by depth then alphabetically
                 const sortedFolders = Array.from(folders).sort((a, b) => {
-                    const depthA = a.split('/').length;
-                    const depthB = b.split('/').length;
+                    const depthA = a.split('/').filter(p => p).length;
+                    const depthB = b.split('/').filter(p => p).length;
                     if (depthA !== depthB) return depthA - depthB;
                     return a.localeCompare(b);
                 });
@@ -655,7 +669,7 @@
                 // Add folders to dropdown with indentation
                 sortedFolders.forEach(folder => {
                     const depth = folder.split('/').filter(p => p).length;
-                    const indent = '  '.repeat(depth);
+                    const indent = '\u00A0\u00A0'.repeat(depth); // Non-breaking spaces
                     const folderName = folder.split('/').filter(p => p).pop() || folder;
                     const option = document.createElement('option');
                     option.value = folder;
@@ -745,28 +759,68 @@
                 const container = document.getElementById('file-tree');
                 container.innerHTML = '';
                 
-                // Get all items in current folder
-                const items = [];
+                // First, collect all explicit folders and implied folders from file paths
+                const allFolders = new Set();
+                const allFiles = [];
+                
                 Object.keys(this.files).forEach(path => {
                     const fileData = this.files[path];
-                    
+                    if (fileData.type === 'folder') {
+                        allFolders.add(path);
+                    } else {
+                        allFiles.push({ path, ...fileData });
+                        // Extract parent folders from file path
+                        if (path.includes('/')) {
+                            const parts = path.split('/');
+                            let currentPath = '';
+                            for (let i = 0; i < parts.length - 1; i++) {
+                                if (parts[i]) {
+                                    currentPath += parts[i] + '/';
+                                    allFolders.add(currentPath);
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                // Get items to show in current folder
+                const items = [];
+                const addedFolders = new Set();
+                
+                // Add folders that are direct children of current folder
+                allFolders.forEach(folderPath => {
                     if (this.currentFolder === '') {
-                        // Root folder - show items without '/' or with no parent folder
-                        const slashIndex = path.indexOf('/');
-                        if (slashIndex === -1 || (slashIndex === path.length - 1 && fileData.type === 'folder')) {
-                            items.push({ path, ...fileData });
-                        } else if (slashIndex === path.length - 1) {
-                            // This is a root-level folder
-                            items.push({ path, ...fileData });
+                        // Root level - folder has no '/' before its name
+                        if (!folderPath.slice(0, -1).includes('/')) {
+                            items.push({ path: folderPath, type: 'folder' });
+                            addedFolders.add(folderPath);
                         }
                     } else {
-                        // In a subfolder - show items that start with current folder
-                        if (path.startsWith(this.currentFolder)) {
-                            const remaining = path.substring(this.currentFolder.length);
-                            const slashIndex = remaining.indexOf('/');
-                            // Show direct children only
-                            if (remaining && (slashIndex === -1 || slashIndex === remaining.length - 1)) {
-                                items.push({ path, ...fileData });
+                        // In subfolder - folder starts with current folder and has one more level
+                        if (folderPath.startsWith(this.currentFolder)) {
+                            const remaining = folderPath.slice(this.currentFolder.length);
+                            const slashCount = (remaining.match(/\//g) || []).length;
+                            if (remaining && slashCount === 1) {
+                                items.push({ path: folderPath, type: 'folder' });
+                                addedFolders.add(folderPath);
+                            }
+                        }
+                    }
+                });
+                
+                // Add files that are in current folder
+                allFiles.forEach(file => {
+                    if (this.currentFolder === '') {
+                        // Root level - file has no '/'
+                        if (!file.path.includes('/')) {
+                            items.push(file);
+                        }
+                    } else {
+                        // In subfolder - file starts with current folder and has no more '/'
+                        if (file.path.startsWith(this.currentFolder)) {
+                            const remaining = file.path.slice(this.currentFolder.length);
+                            if (remaining && !remaining.includes('/')) {
+                                items.push(file);
                             }
                         }
                     }
@@ -774,8 +828,10 @@
                 
                 // Sort: folders first, then files alphabetically
                 items.sort((a, b) => {
-                    if (a.type === 'folder' && b.type !== 'folder') return -1;
-                    if (a.type !== 'folder' && b.type === 'folder') return 1;
+                    const aIsFolder = a.type === 'folder';
+                    const bIsFolder = b.type === 'folder';
+                    if (aIsFolder && !bIsFolder) return -1;
+                    if (!aIsFolder && bIsFolder) return 1;
                     return a.path.localeCompare(b.path);
                 });
                 
