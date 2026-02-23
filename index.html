@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevStudio - AI-Powered Development Environment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; overflow: hidden; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e1e1e; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        /* Animations */
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); } 50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); } }
+        
+        .slide-in { animation: slideIn 0.3s ease-out; }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        .ai-thinking { animation: pulse-glow 2s infinite; }
+        
+        /* Glassmorphism */
+        .glass { background: rgba(30, 30, 30, 0.8); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        
+        /* Split pane resizer */
+        .resizer { width: 4px; background: #374151; cursor: col-resize; transition: background 0.2s; }
+        .resizer:hover { background: #3b82f6; }
+        .resizer-horizontal { height: 4px; cursor: row-resize; }
+        
+        /* Monaco Editor container */
+        #editor-container { height: 100%; width: 100%; }
+        
+        /* Preview iframe */
+        #preview-frame { border: none; width: 100%; height: 100%; background: white; }
+        
+        /* Version timeline */
+        .version-dot { width: 12px; height: 12px; border-radius: 50%; background: #4b5563; border: 2px solid #1f2937; transition: all 0.2s; }
+        .version-dot:hover { background: #3b82f6; transform: scale(1.2); }
+        .version-dot.active { background: #10b981; border-color: #10b981; }
+        .version-line { width: 2px; background: #374151; flex: 1; margin: 4px 0; }
+        
+        /* Chat bubbles */
+        .chat-bubble { max-width: 80%; padding: 12px 16px; border-radius: 12px; margin: 8px 0; word-wrap: break-word; }
+        .chat-bubble.user { background: #3b82f6; color: white; align-self: flex-end; margin-left: auto; }
+        .chat-bubble.ai { background: #374151; color: #e5e7eb; border: 1px solid #4b5563; }
+        
+        /* Loading spinner */
+        .spinner { border: 2px solid #374151; border-top: 2px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <i class="fas fa-code text-white text-sm"></i>
+            </div>
+            <h1 class="font-semibold text-lg tracking-tight">DevStudio</h1>
+            <span class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-400">v1.0</span>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button onclick="app.toggleSettings()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="Settings">
+                <i class="fas fa-cog text-gray-400"></i>
+            </button>
+            <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                <i class="fab fa-github"></i>
+                <span id="github-status">Connect GitHub</span>
+            </button>
+            <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-sm font-medium">
+                <i class="fas fa-cloud-upload-alt"></i>
+                Sync
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- Left Sidebar: File Explorer -->
+        <aside class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col shrink-0">
+            <div class="p-3 border-b border-gray-700 flex items-center justify-between">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Explorer</span>
+                <div class="flex gap-1">
+                    <button onclick="app.createFile()" class="p-1.5 hover:bg-gray-700 rounded" title="New File">
+                        <i class="fas fa-file-medical text-xs text-gray-400"></i>
+                    </button>
+                    <button onclick="app.createFolder()" class="p-1.5 hover:bg-gray-700 rounded" title="New Folder">
+                        <i class="fas fa-folder-plus text-xs text-gray-400"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="file-tree" class="flex-1 overflow-y-auto p-2 text-sm">
+                <!-- File tree rendered here -->
+            </div>
+            
+            <!-- Version History Panel -->
+            <div class="h-1/3 border-t border-gray-700 flex flex-col">
+                <div class="p-3 border-b border-gray-700 flex items-center justify-between">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                </div>
+                <div id="version-list" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Editor -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <!-- Tabs -->
+            <div id="tabs-container" class="h-9 bg-gray-800 border-b border-gray-700 flex items-center overflow-x-auto">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <!-- Editor Area -->
+            <div class="flex-1 relative">
+                <div id="editor-container"></div>
+                <div id="empty-state" class="absolute inset-0 flex items-center justify-center bg-gray-900 hidden">
+                    <div class="text-center text-gray-500">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Chat Panel (Collapsible) -->
+            <div id="chat-panel" class="h-64 bg-gray-800 border-t border-gray-700 flex flex-col transition-all duration-300">
+                <div class="h-8 bg-gray-750 border-b border-gray-700 flex items-center justify-between px-3 cursor-pointer" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-medium">AI Assistant</span>
+                        <span id="ai-status" class="text-[10px] bg-gray-700 px-1.5 rounded text-gray-400">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-2">
+                    <div class="chat-bubble ai">
+                        <p class="text-sm">Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?</p>
+                    </div>
+                </div>
+                <div class="p-3 border-t border-gray-700 bg-gray-850">
+                    <div class="flex gap-2">
+                        <input type="text" id="chat-input" placeholder="Ask me to modify code, explain something, or fix bugs..." 
+                               class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="app.quickAction('explain')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Explain Code</button>
+                        <button onclick="app.quickAction('fix')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resizer -->
+        <div class="resizer" id="resizer"></div>
+
+        <!-- Right: Live Preview -->
+        <div class="w-1/3 min-w-[300px] bg-gray-900 flex flex-col">
+            <div class="h-9 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-3">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-gray-700 rounded" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs text-gray-400"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-gray-700 rounded" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 bg-white relative">
+                <iframe id="preview-frame"></iframe>
+                <div id="preview-loading" class="absolute inset-0 bg-gray-900 flex items-center justify-center hidden">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    
+    <!-- GitHub Connect Modal -->
+    <div id="github-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-gray-800 rounded-xl p-6 w-96 border border-gray-700 shadow-2xl">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
+                <i class="fab fa-github"></i> Connect to GitHub
+            </h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Personal Access Token</label>
+                    <input type="password" id="github-token" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="ghp_...">
+                    <p class="text-xs text-gray-500 mt-1">Create one at GitHub Settings > Developer settings > Personal access tokens</p>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Repository (owner/repo)</label>
+                    <input type="text" id="github-repo" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="username/my-project">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="app.connectGitHub()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg font-medium transition-colors">Connect</button>
+                    <button onclick="app.closeModal('github-modal')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg transition-colors">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-gray-800 rounded-xl p-6 w-[500px] border border-gray-700 shadow-2xl max-h-[80vh] overflow-y-auto">
+            <h2 class="text-xl font-semibold mb-4">Settings</h2>
+            
+            <div class="space-y-6">
+                <!-- AI Configuration -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">AI Configuration</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">AI Provider</label>
+                            <select id="ai-provider" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" onchange="app.updateAISettings()">
+                                <option value="openai">OpenAI (GPT-4)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
+                                <option value="google">Google (Gemini)</option>
+                                <option value="local">Local/Custom Endpoint</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">API Key</label>
+                            <input type="password" id="ai-api-key" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="sk-...">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Model</label>
+                            <input type="text" id="ai-model" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="gpt-4, claude-3-opus, etc.">
+                        </div>
+                        <div id="local-endpoint-container" class="hidden">
+                            <label class="block text-sm text-gray-400 mb-1">Custom Endpoint URL</label>
+                            <input type="text" id="ai-endpoint" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="http://localhost:11434/v1/chat/completions">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Editor Settings -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Editor</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-400">Theme</span>
+                            <select id="editor-theme" class="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onchange="app.updateEditorTheme()">
+                                <option value="vs-dark">Dark</option>
+                                <option value="vs">Light</option>
+                                <option value="hc-black">High Contrast</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-400">Font Size</span>
+                            <input type="number" id="font-size" value="14" min="10" max="24" class="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onchange="app.updateFontSize()">
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-400">Word Wrap</span>
+                            <input type="checkbox" id="word-wrap" checked class="rounded bg-gray-700" onchange="app.toggleWordWrap()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project Settings -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Project</h3>
+                    <button onclick="app.exportProject()" class="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm transition-colors mb-2">
+                        <i class="fas fa-download mr-2"></i>Export Project as ZIP
+                    </button>
+                    <button onclick="app.clearAllData()" class="w-full bg-red-900/50 hover:bg-red-900/80 text-red-200 py-2 rounded-lg text-sm transition-colors">
+                        <i class="fas fa-trash mr-2"></i>Clear All Data
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="app.closeModal('settings-modal')" class="mt-6 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg transition-colors">Close</button>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div id="new-file-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center">
+        <div class="bg-gray-800 rounded-xl p-6 w-80 border border-gray-700 shadow-2xl">
+            <h3 class="text-lg font-semibold mb-3">Create New File</h3>
+            <input type="text" id="new-file-name" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-500" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <div class="flex gap-2">
+                <button onclick="app.confirmCreateFile()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-sm font-medium">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Application State
+        const app = {
+            editor: null,
+            currentFile: null,
+            files: {},
+            versions: [],
+            github: { token: null, repo: null, connected: false },
+            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
+            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
+            chatCollapsed: false,
+            
+            init() {
+                this.loadFromStorage();
+                this.initMonaco();
+                this.renderFileTree();
+                this.renderVersions();
+                this.setupResizer();
+                this.setupAutoSave();
+                
+                // Load settings into UI
+                document.getElementById('ai-provider').value = this.ai.provider;
+                document.getElementById('ai-api-key').value = this.ai.apiKey;
+                document.getElementById('ai-model').value = this.ai.model;
+                document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                if (this.github.connected) {
+                    document.getElementById('github-status').textContent = this.github.repo;
+                }
+            },
+
+            initMonaco() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                
+                require(['vs/editor/editor.main'], () => {
+                    this.editor = monaco.editor.create(document.getElementById('editor-container'), {
+                        value: '',
+                        language: 'javascript',
+                        theme: this.settings.theme,
+                        fontSize: this.settings.fontSize,
+                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
+                        automaticLayout: true,
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        roundedSelection: false,
+                        padding: { top: 16 },
+                        renderLineHighlight: 'all',
+                        selectOnLineNumbers: true,
+                        matchBrackets: 'always',
+                        quickSuggestions: true,
+                        suggestOnTriggerCharacters: true,
+                        acceptSuggestionOnEnter: 'on'
+                    });
+
+                    // Auto-update preview on change with debounce
+                    let timeout;
+                    this.editor.onDidChangeModelContent(() => {
+                        if (this.currentFile) {
+                            clearTimeout(timeout);
+                            timeout = setTimeout(() => {
+                                this.files[this.currentFile].content = this.editor.getValue();
+                                this.saveToStorage();
+                                if (this.isPreviewable(this.currentFile)) {
+                                    this.updatePreview();
+                                }
+                            }, 1000);
+                        }
+                    });
+                });
+            },
+
+            // File Management
+            createFile() {
+                document.getElementById('new-file-modal').classList.remove('hidden');
+                document.getElementById('new-file-name').focus();
+            },
+
+            confirmCreateFile() {
+                const name = document.getElementById('new-file-name').value.trim();
+                if (name && !this.files[name]) {
+                    this.files[name] = { content: '', type: 'file' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.openFile(name);
+                    this.closeModal('new-file-modal');
+                    document.getElementById('new-file-name').value = '';
+                }
+            },
+
+            createFolder() {
+                const name = prompt('Folder name:');
+                if (name) {
+                    // Simple flat structure for demo; could be extended to nested
+                    this.files[name + '/'] = { content: null, type: 'folder' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                }
+            },
+
+            openFile(filename) {
+                if (this.files[filename]?.type === 'folder') return;
+                
+                this.currentFile = filename;
+                
+                if (this.editor) {
+                    const model = monaco.editor.createModel(
+                        this.files[filename]?.content || '',
+                        this.getLanguage(filename)
+                    );
+                    this.editor.setModel(model);
+                }
+                
+                this.renderTabs();
+                this.renderFileTree();
+                
+                // Update preview if it's an HTML file
+                if (this.isPreviewable(filename)) {
+                    this.updatePreview();
+                }
+            },
+
+            closeFile(filename) {
+                delete this.files[filename];
+                if (this.currentFile === filename) {
+                    const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
+                    this.currentFile = remaining[0] || null;
+                    if (this.currentFile) {
+                        this.openFile(this.currentFile);
+                    } else {
+                        this.editor.setValue('');
+                        document.getElementById('empty-state').classList.remove('hidden');
+                    }
+                }
+                this.saveToStorage();
+                this.renderTabs();
+                this.renderFileTree();
+            },
+
+            getLanguage(filename) {
+                const ext = filename.split('.').pop();
+                const map = {
+                    'js': 'javascript', 'ts': 'typescript', 'html': 'html',
+                    'css': 'css', 'json': 'json', 'py': 'python',
+                    'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript'
+                };
+                return map[ext] || 'plaintext';
+            },
+
+            isPreviewable(filename) {
+                return filename.endsWith('.html') || filename.endsWith('.htm');
+            },
+
+            // UI Rendering
+            renderFileTree() {
+                const container = document.getElementById('file-tree');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).sort().forEach(filename => {
+                    const div = document.createElement('div');
+                    div.className = `flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${this.currentFile === filename ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-gray-700 text-gray-300'}`;
+                    
+                    const isFolder = this.files[filename].type === 'folder';
+                    const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
+                    
+                    div.innerHTML = `
+                        <i class="fas ${icon} w-4 text-center text-xs"></i>
+                        <span class="flex-1 truncate text-sm">${filename}</span>
+                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 hover:text-red-400"><i class="fas fa-times text-xs"></i></button>` : ''}
+                    `;
+                    
+                    div.onclick = () => this.openFile(filename);
+                    div.classList.add('group');
+                    container.appendChild(div);
+                });
+            },
+
+            getFileIcon(filename) {
+                if (filename.endsWith('.js')) return 'fa-js text-yellow-400';
+                if (filename.endsWith('.html')) return 'fa-html5 text-orange-500';
+                if (filename.endsWith('.css')) return 'fa-css3 text-blue-400';
+                if (filename.endsWith('.json')) return 'fa-cog text-gray-400';
+                return 'fa-file-code text-gray-400';
+            },
+
+            renderTabs() {
+                const container = document.getElementById('tabs-container');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
+                    const tab = document.createElement('div');
+                    tab.className = `flex items-center gap-2 px-3 py-2 border-r border-gray-700 cursor-pointer text-sm min-w-[100px] max-w-[200px] ${this.currentFile === filename ? 'bg-gray-700 text-white border-t-2 border-t-blue-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'}`;
+                    tab.innerHTML = `
+                        <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
+                        <span class="flex-1 truncate">${filename}</span>
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1"><i class="fas fa-times text-xs"></i></button>
+                    `;
+                    tab.onclick = () => this.openFile(filename);
+                    container.appendChild(tab);
+                });
+            },
+
+            // Version Control
+            createCheckpoint() {
+                const checkpoint = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    message: `Checkpoint ${this.versions.length + 1}`,
+                    files: JSON.parse(JSON.stringify(this.files))
+                };
+                
+                this.versions.unshift(checkpoint);
+                if (this.versions.length > 20) this.versions.pop(); // Keep last 20
+                
+                this.saveToStorage();
+                this.renderVersions();
+                
+                // Visual feedback
+                this.showToast('Checkpoint saved!');
+            },
+
+            restoreVersion(id) {
+                const version = this.versions.find(v => v.id === id);
+                if (version) {
+                    if (confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
+                        // Save current as checkpoint first
+                        this.createCheckpoint();
+                        
+                        this.files = JSON.parse(JSON.stringify(version.files));
+                        this.saveToStorage();
+                        this.renderFileTree();
+                        if (this.currentFile && this.files[this.currentFile]) {
+                            this.openFile(this.currentFile);
+                        }
+                        this.showToast('Version restored!');
+                    }
+                }
+            },
+
+            renderVersions() {
+                const container = document.getElementById('version-list');
+                container.innerHTML = '';
+                
+                this.versions.forEach((version, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-start gap-3 cursor-pointer group';
+                    div.innerHTML = `
+                        <div class="flex flex-col items-center pt-1">
+                            <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
+                            ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
+                        </div>
+                        <div class="flex-1 pb-4" onclick="app.restoreVersion(${version.id})">
+                            <div class="text-xs font-medium text-gray-300 group-hover:text-blue-400 transition-colors">${version.message}</div>
+                            <div class="text-[10px] text-gray-500">${new Date(version.timestamp).toLocaleString()}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            },
+
+            // Preview
+            updatePreview() {
+                if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
+                
+                const html = this.files[this.currentFile]?.content || '';
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                
+                document.getElementById('preview-frame').src = url;
+            },
+
+            refreshPreview() {
+                this.updatePreview();
+            },
+
+            openPreviewInNewTab() {
+                if (this.currentFile && this.isPreviewable(this.currentFile)) {
+                    const html = this.files[this.currentFile].content;
+                    const blob = new Blob([html], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                }
+            },
+
+            // AI Chat
+            async sendMessage() {
+                const input = document.getElementById('chat-input');
+                const message = input.value.trim();
+                if (!message) return;
+                
+                // Add user message
+                this.addChatMessage(message, 'user');
+                input.value = '';
+                
+                // Show thinking state
+                document.getElementById('ai-status').textContent = 'Thinking...';
+                document.getElementById('ai-status').classList.add('ai-thinking');
+                
+                try {
+                    const response = await this.callAI(message);
+                    this.addChatMessage(response, 'ai');
+                    
+                    // If AI returns code blocks, offer to apply them
+                    if (response.includes('```')) {
+                        this.addChatMessage('Would you like me to apply these changes to the current file? Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button>', 'ai');
+                    }
+                } catch (error) {
+                    this.addChatMessage('Sorry, I encountered an error: ' + error.message, 'ai');
+                } finally {
+                    document.getElementById('ai-status').textContent = 'Ready';
+                    document.getElementById('ai-status').classList.remove('ai-thinking');
+                }
+            },
+
+            async callAI(message) {
+                const { provider, apiKey, model, endpoint } = this.ai;
+                
+                if (!apiKey && provider !== 'local') {
+                    throw new Error('Please configure your AI API key in Settings first.');
+                }
+
+                const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
+                const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\n${currentCode}\n\nUser request: ${message}`;
+                
+                let url, body, headers;
+
+                if (provider === 'openai') {
+                    url = 'https://api.openai.com/v1/chat/completions';
+                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ model: model || 'gpt-4', messages: [{ role: 'user', content: context }] });
+                } else if (provider === 'anthropic') {
+                    url = 'https://api.anthropic.com/v1/messages';
+                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+                    body = JSON.stringify({ model: model || 'claude-3-opus-20240229', max_tokens: 4096, messages: [{ role: 'user', content: context }] });
+                } else if (provider === 'google') {
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-pro'}:generateContent?key=${apiKey}`;
+                    headers = { 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }] });
+                } else {
+                    url = endpoint;
+                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
+                }
+
+                // Note: In production, this should go through a backend proxy to protect API keys
+                // For demo purposes, calling directly (CORS may block some providers)
+                const response = await fetch(url, { method: 'POST', headers, body });
+                const data = await response.json();
+                
+                if (provider === 'anthropic') return data.content[0].text;
+                if (provider === 'google') return data.candidates[0].content.parts[0].text;
+                return data.choices[0].message.content;
+            },
+
+            addChatMessage(text, sender) {
+                const container = document.getElementById('chat-messages');
+                const div = document.createElement('div');
+                div.className = `chat-bubble ${sender} slide-in`;
+                div.innerHTML = text;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            },
+
+            quickAction(action) {
+                const actions = {
+                    explain: 'Explain what this code does in detail',
+                    fix: 'Find and fix any bugs in this code',
+                    optimize: 'Optimize this code for better performance',
+                    document: 'Add comprehensive documentation/comments to this code'
+                };
+                document.getElementById('chat-input').value = actions[action];
+                this.sendMessage();
+            },
+
+            applyAIChanges() {
+                // Extract code blocks and apply to current file
+                const messages = document.getElementById('chat-messages').children;
+                const lastMessage = messages[messages.length - 2]; // Get AI response before the apply button
+                const text = lastMessage.textContent;
+                
+                const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
+                if (codeBlock && this.currentFile) {
+                    this.files[this.currentFile].content = codeBlock[1].trim();
+                    this.openFile(this.currentFile);
+                    this.showToast('Changes applied!');
+                }
+            },
+
+            toggleChat() {
+                const panel = document.getElementById('chat-panel');
+                const icon = document.getElementById('chat-toggle-icon');
+                this.chatCollapsed = !this.chatCollapsed;
+                
+                if (this.chatCollapsed) {
+                    panel.style.height = '32px';
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    panel.style.height = '256px';
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            },
+
+            // GitHub Integration
+            showGitHubModal() {
+                document.getElementById('github-modal').classList.remove('hidden');
+                if (this.github.token) {
+                    document.getElementById('github-token').value = this.github.token;
+                    document.getElementById('github-repo').value = this.github.repo || '';
+                }
+            },
+
+            async connectGitHub() {
+                const token = document.getElementById('github-token').value.trim();
+                const repo = document.getElementById('github-repo').value.trim();
+                
+                if (!token || !repo) {
+                    alert('Please provide both token and repository');
+                    return;
+                }
+                
+                // Verify token
+                try {
+                    const response = await fetch('https://api.github.com/user', {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    
+                    if (response.ok) {
+                        this.github = { token, repo, connected: true };
+                        this.saveToStorage();
+                        document.getElementById('github-status').textContent = repo;
+                        this.closeModal('github-modal');
+                        this.showToast('Connected to GitHub!');
+                        
+                        // Load repo contents
+                        this.loadGitHubRepo();
+                    } else {
+                        alert('Invalid token or unable to connect');
+                    }
+                } catch (error) {
+                    alert('Error connecting to GitHub: ' + error.message);
+                }
+            },
+
+            async loadGitHubRepo() {
+                if (!this.github.connected) return;
+                
+                try {
+                    const [owner, repo] = this.github.repo.split('/');
+                    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+                        headers: { 'Authorization': `token ${this.github.token}` }
+                    });
+                    
+                    const data = await response.json();
+                    
+                    // Clear current files and load from repo
+                    this.files = {};
+                    for (const item of data) {
+                        if (item.type === 'file') {
+                            const contentResponse = await fetch(item.download_url);
+                            const content = await contentResponse.text();
+                            this.files[item.name] = { content, type: 'file' };
+                        }
+                    }
+                    
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.showToast('Repository loaded!');
+                    
+                    // Open first HTML file or any file
+                    const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
+                    if (firstHtml) this.openFile(firstHtml);
+                    else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
+                    
+                } catch (error) {
+                    console.error('Error loading repo:', error);
+                    this.showToast('Error loading repository');
+                }
+            },
+
+            async deployToGitHub() {
+                if (!this.github.connected) {
+                    this.showGitHubModal();
+                    return;
+                }
+                
+                const [owner, repo] = this.github.repo.split('/');
+                let successCount = 0;
+                
+                for (const [filename, fileData] of Object.entries(this.files)) {
+                    if (fileData.type === 'folder') continue;
+                    
+                    try {
+                        // Get current file SHA if it exists
+                        const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
+                            headers: { 'Authorization': `token ${this.github.token}` }
+                        });
+                        
+                        let sha = null;
+                        if (getResponse.ok) {
+                            const data = await getResponse.json();
+                            sha = data.sha;
+                        }
+                        
+                        // Create or update file
+                        const content = btoa(unescape(encodeURIComponent(fileData.content)));
+                        const body = {
+                            message: `Update ${filename} via DevStudio`,
+                            content: content,
+                            ...(sha && { sha })
+                        };
+                        
+                        const putResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `token ${this.github.token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(body)
+                        });
+                        
+                        if (putResponse.ok) successCount++;
+                    } catch (error) {
+                        console.error(`Error saving ${filename}:`, error);
+                    }
+                }
+                
+                this.showToast(`Synced ${successCount} files to GitHub!`);
+            },
+
+            // Settings
+            toggleSettings() {
+                document.getElementById('settings-modal').classList.remove('hidden');
+            },
+
+            updateAISettings() {
+                const provider = document.getElementById('ai-provider').value;
+                document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
+                
+                this.ai = {
+                    provider,
+                    apiKey: document.getElementById('ai-api-key').value,
+                    model: document.getElementById('ai-model').value,
+                    endpoint: document.getElementById('ai-endpoint').value
+                };
+                this.saveToStorage();
+            },
+
+            updateEditorTheme() {
+                const theme = document.getElementById('editor-theme').value;
+                this.settings.theme = theme;
+                monaco.editor.setTheme(theme);
+                this.saveToStorage();
+            },
+
+            updateFontSize() {
+                const size = parseInt(document.getElementById('font-size').value);
+                this.settings.fontSize = size;
+                this.editor.updateOptions({ fontSize: size });
+                this.saveToStorage();
+            },
+
+            toggleWordWrap() {
+                const wrap = document.getElementById('word-wrap').checked;
+                this.settings.wordWrap = wrap;
+                this.editor.updateOptions({ wordWrap: wrap ? 'on' : 'off' });
+                this.saveToStorage();
+            },
+
+            // Storage
+            saveToStorage() {
+                const data = {
+                    files: this.files,
+                    versions: this.versions,
+                    github: this.github,
+                    ai: this.ai,
+                    settings: this.settings
+                };
+                localStorage.setItem('devstudio_data', JSON.stringify(data));
+            },
+
+            loadFromStorage() {
+                const data = localStorage.getItem('devstudio_data');
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    this.files = parsed.files || {};
+                    this.versions = parsed.versions || [];
+                    this.github = parsed.github || { token: null, repo: null, connected: false };
+                    this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' };
+                    this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
+                } else {
+                    // Initialize with demo files
+                    this.files = {
+                        'index.html': {
+                            content: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Project</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        h1 { font-size: 3rem; margin-bottom: 1rem; }
+        p { font-size: 1.25rem; opacity: 0.9; }
+        .card {
+            background: rgba(255,255,255,0.1);
+            padding: 2rem;
+            border-radius: 1rem;
+            margin-top: 2rem;
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to DevStudio</h1>
+    <p>Edit this code to see live changes instantly!</p>
+    <div class="card">
+        <h2>Getting Started</h2>
+        <ul>
+            <li>Edit files in the left sidebar</li>
+            <li>Use the AI chat for help</li>
+            <li>Save checkpoints to track changes</li>
+            <li>Connect GitHub to sync</li>
+        </ul>
+    </div>
+</body>
+</html>`,
+                            type: 'file'
+                        },
+                        'style.css': {
+                            content: `/* Add your styles here */
+body {
+    margin: 0;
+    padding: 0;
+}`,
+                            type: 'file'
+                        },
+                        'script.js': {
+                            content: `// Add your JavaScript here
+console.log('Hello from DevStudio!');`,
+                            type: 'file'
+                        }
+                    };
+                    this.createCheckpoint();
+                }
+            },
+
+            exportProject() {
+                // Create a simple zip-like download (in real app, use JSZip library)
+                let content = '';
+                for (const [name, data] of Object.entries(this.files)) {
+                    if (data.type === 'file') {
+                        content += `=== ${name} ===\n${data.content}\n\n`;
+                    }
+                }
+                
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'project-export.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+            },
+
+            clearAllData() {
+                if (confirm('Are you sure? This will delete all files and history.')) {
+                    localStorage.removeItem('devstudio_data');
+                    location.reload();
+                }
+            },
+
+            // Utilities
+            closeModal(id) {
+                document.getElementById(id).classList.add('hidden');
+            },
+
+            showToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg border border-gray-700 slide-in z-50';
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            },
+
+            setupResizer() {
+                const resizer = document.getElementById('resizer');
+                const left = resizer.previousElementSibling;
+                const right = resizer.nextElementSibling;
+                
+                let x = 0;
+                let leftWidth = 0;
+                
+                const mouseDownHandler = function(e) {
+                    x = e.clientX;
+                    leftWidth = left.getBoundingClientRect().width;
+                    document.addEventListener('mousemove', mouseMoveHandler);
+                    document.addEventListener('mouseup', mouseUpHandler);
+                    resizer.classList.add('bg-blue-500');
+                };
+                
+                const mouseMoveHandler = function(e) {
+                    const dx = e.clientX - x;
+                    const newLeftWidth = ((leftWidth + dx) * 100) / resizer.parentNode.getBoundingClientRect().width;
+                    left.style.width = `${newLeftWidth}%`;
+                };
+                
+                const mouseUpHandler = function() {
+                    document.removeEventListener('mousemove', mouseMoveHandler);
+                    document.removeEventListener('mouseup', mouseUpHandler);
+                    resizer.classList.remove('bg-blue-500');
+                };
+                
+                resizer.addEventListener('mousedown', mouseDownHandler);
+            },
+
+            setupAutoSave() {
+                // Auto-save every 30 seconds
+                setInterval(() => {
+                    if (this.currentFile) {
+                        this.saveToStorage();
+                    }
+                }, 30000);
+            }
+        };
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => app.init());
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            if (app.editor) app.editor.layout();
+        });
+    </script>
+</body>
+</html>
