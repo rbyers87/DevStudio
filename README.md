@@ -43,3 +43,24 @@ Security Notes
 •  GitHub Token: Uses standard Personal Access Tokens (create one in GitHub Settings > Developer settings > Personal access tokens)
 •  No Backend: This runs entirely in your browser—your code and keys never touch my servers
 The interface uses a professional dark theme with Monaco Editor (the same engine as VS Code), responsive layouts, and smooth animations. All data persists in your browser's local storage, so your work survives page refreshes.
+
+## Prompt to contiue:
+
+Continue working on my DevStudio project. The file is at /mnt/okcomputer/output/devstudio/index.html
+
+Current state:
+- It's a web-based code editor with Monaco Editor, live preview, AI chat, GitHub sync, and version history
+- Recent fixes: Folder navigation dropdown, recursive GitHub repo loading, CORS handling for AI providers
+
+I need help with: [DESCRIBE WHAT YOU WANT TO ADD/FIX NEXT]
+
+Current features:
+- Multi-provider AI chat (OpenAI, Anthropic, Google, Deepseek, Kimi, Local)
+- GitHub connect/sync with recursive folder loading
+- File explorer with folder navigation dropdown
+- Monaco code editor with syntax highlighting
+- Live preview for HTML files
+- Version history/checkpoints
+- Resizable panels
+
+Tech stack: Single HTML file, Tailwind CSS, Monaco Editor via CDN
