@@ -1193,14 +1193,12 @@
                 if (!this.github.connected) return;
                 try {
                     const [owner, repo] = this.github.repo.split('/');
-                    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, { headers: { 'Authorization': `token ${this.github.token}` } });
-                    const data = await response.json();
                     this.files = {};
-                    for (const item of data) if (item.type === 'file') {
-                        const contentResponse = await fetch(item.download_url);
-                        const content = await contentResponse.text();
-                        this.files[item.name] = { content, type: 'file' };
-                    }
+                    
+                    // Recursively fetch all files from the repository
+                    await this.fetchGitHubContents(owner, repo, '');
+                    
+                    this.currentFolder = '';
                     this.saveToStorage();
                     this.updateFolderSelector();
                     this.renderFileTree();
@@ -1209,7 +1207,33 @@
                     if (firstHtml) this.openFile(firstHtml);
                     else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
                 } catch (error) {
-                    this.showToast('Error loading repository');
+                    console.error('GitHub load error:', error);
+                    this.showToast('Error loading repository: ' + error.message);
+                }
+            },
+
+            async fetchGitHubContents(owner, repo, path) {
+                const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+                const response = await fetch(url, { headers: { 'Authorization': `token ${this.github.token}` } });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch ${path}: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                for (const item of data) {
+                    if (item.type === 'file') {
+                        // Fetch file content
+                        const contentResponse = await fetch(item.download_url);
+                        const content = await contentResponse.text();
+                        this.files[item.path] = { content, type: 'file' };
+                    } else if (item.type === 'dir') {
+                        // Create folder entry
+                        this.files[item.path + '/'] = { content: null, type: 'folder' };
+                        // Recursively fetch contents
+                        await this.fetchGitHubContents(owner, repo, item.path);
+                    }
                 }
             },
 
