@@ -56,6 +56,14 @@
         /* Loading spinner */
         .spinner { border: 2px solid #374151; border-top: 2px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Provider badges */
+        .provider-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .provider-openai { background: #10a37f; color: white; }
+        .provider-anthropic { background: #d4a574; color: #1a1a1a; }
+        .provider-google { background: #4285f4; color: white; }
+        .provider-deepseek { background: #4f46e5; color: white; }
+        .provider-local { background: #6b7280; color: white; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 h-screen flex flex-col">
@@ -68,6 +76,7 @@
             </div>
             <h1 class="font-semibold text-lg tracking-tight">DevStudio</h1>
             <span class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-400">v1.0</span>
+            <span id="active-provider" class="provider-badge provider-openai hidden">OpenAI</span>
         </div>
 
         <div class="flex items-center gap-3">
@@ -144,6 +153,7 @@
                         <i class="fas fa-robot text-blue-400 text-xs"></i>
                         <span class="text-xs font-medium">AI Assistant</span>
                         <span id="ai-status" class="text-[10px] bg-gray-700 px-1.5 rounded text-gray-400">Ready</span>
+                        <span id="current-model-badge" class="text-[10px] bg-blue-900 text-blue-200 px-1.5 rounded hidden">GPT-4</span>
                     </div>
                     <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
                 </div>
@@ -238,16 +248,20 @@
                                 <option value="openai">OpenAI (GPT-4)</option>
                                 <option value="anthropic">Anthropic (Claude)</option>
                                 <option value="google">Google (Gemini)</option>
+                                <option value="deepseek">Deepseek (Deepseek-V3/R1)</option>
                                 <option value="local">Local/Custom Endpoint</option>
                             </select>
+                            <p class="text-xs text-gray-500 mt-1" id="provider-help">Select your AI provider and enter API credentials below</p>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-400 mb-1">API Key</label>
                             <input type="password" id="ai-api-key" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="sk-...">
+                            <p class="text-xs text-gray-500 mt-1" id="api-key-help">Get your key from platform.deepseek.com for Deepseek</p>
                         </div>
                         <div>
                             <label class="block text-sm text-gray-400 mb-1">Model</label>
-                            <input type="text" id="ai-model" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="gpt-4, claude-3-opus, etc.">
+                            <input type="text" id="ai-model" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="gpt-4, claude-3-opus, deepseek-chat, etc.">
+                            <p class="text-xs text-gray-500 mt-1">Deepseek: use 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
                         </div>
                         <div id="local-endpoint-container" class="hidden">
                             <label class="block text-sm text-gray-400 mb-1">Custom Endpoint URL</label>
@@ -319,6 +333,55 @@
             settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
             chatCollapsed: false,
             
+            // Provider configurations
+            providers: {
+                openai: {
+                    name: 'OpenAI',
+                    baseUrl: 'https://api.openai.com/v1/chat/completions',
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer ',
+                    model: 'gpt-4',
+                    badgeClass: 'provider-openai',
+                    helpText: 'Get your API key from platform.openai.com'
+                },
+                anthropic: {
+                    name: 'Anthropic',
+                    baseUrl: 'https://api.anthropic.com/v1/messages',
+                    authHeader: 'x-api-key',
+                    authPrefix: '',
+                    model: 'claude-3-opus-20240229',
+                    badgeClass: 'provider-anthropic',
+                    helpText: 'Get your API key from console.anthropic.com'
+                },
+                google: {
+                    name: 'Google',
+                    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+                    authHeader: 'key',
+                    authPrefix: '',
+                    model: 'gemini-pro',
+                    badgeClass: 'provider-google',
+                    helpText: 'Get your API key from makersuite.google.com'
+                },
+                deepseek: {
+                    name: 'Deepseek',
+                    baseUrl: 'https://api.deepseek.com/chat/completions',
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer ',
+                    model: 'deepseek-chat',
+                    badgeClass: 'provider-deepseek',
+                    helpText: 'Get your API key from platform.deepseek.com'
+                },
+                local: {
+                    name: 'Local',
+                    baseUrl: '',
+                    authHeader: 'Authorization',
+                    authPrefix: 'Bearer ',
+                    model: 'local-model',
+                    badgeClass: 'provider-local',
+                    helpText: 'Enter your local endpoint URL below'
+                }
+            },
+
             init() {
                 this.loadFromStorage();
                 this.initMonaco();
@@ -326,6 +389,7 @@
                 this.renderVersions();
                 this.setupResizer();
                 this.setupAutoSave();
+                this.updateProviderUI();
                 
                 // Load settings into UI
                 document.getElementById('ai-provider').value = this.ai.provider;
@@ -378,6 +442,29 @@
                 });
             },
 
+            updateProviderUI() {
+                const provider = this.providers[this.ai.provider];
+                const badge = document.getElementById('active-provider');
+                const modelBadge = document.getElementById('current-model-badge');
+                
+                if (badge) {
+                    badge.className = `provider-badge ${provider.badgeClass}`;
+                    badge.textContent = provider.name;
+                    badge.classList.remove('hidden');
+                }
+                
+                if (modelBadge && this.ai.model) {
+                    modelBadge.textContent = this.ai.model;
+                    modelBadge.classList.remove('hidden');
+                }
+                
+                // Update help text
+                const helpText = document.getElementById('provider-help');
+                const apiKeyHelp = document.getElementById('api-key-help');
+                if (helpText) helpText.textContent = provider.helpText;
+                if (apiKeyHelp) apiKeyHelp.textContent = provider.helpText;
+            },
+
             // File Management
             createFile() {
                 document.getElementById('new-file-modal').classList.remove('hidden');
@@ -399,7 +486,6 @@
             createFolder() {
                 const name = prompt('Folder name:');
                 if (name) {
-                    // Simple flat structure for demo; could be extended to nested
                     this.files[name + '/'] = { content: null, type: 'folder' };
                     this.saveToStorage();
                     this.renderFileTree();
@@ -422,7 +508,6 @@
                 this.renderTabs();
                 this.renderFileTree();
                 
-                // Update preview if it's an HTML file
                 if (this.isPreviewable(filename)) {
                     this.updatePreview();
                 }
@@ -518,12 +603,10 @@
                 };
                 
                 this.versions.unshift(checkpoint);
-                if (this.versions.length > 20) this.versions.pop(); // Keep last 20
+                if (this.versions.length > 20) this.versions.pop();
                 
                 this.saveToStorage();
                 this.renderVersions();
-                
-                // Visual feedback
                 this.showToast('Checkpoint saved!');
             },
 
@@ -531,9 +614,7 @@
                 const version = this.versions.find(v => v.id === id);
                 if (version) {
                     if (confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
-                        // Save current as checkpoint first
                         this.createCheckpoint();
-                        
                         this.files = JSON.parse(JSON.stringify(version.files));
                         this.saveToStorage();
                         this.renderFileTree();
@@ -596,11 +677,9 @@
                 const message = input.value.trim();
                 if (!message) return;
                 
-                // Add user message
                 this.addChatMessage(message, 'user');
                 input.value = '';
                 
-                // Show thinking state
                 document.getElementById('ai-status').textContent = 'Thinking...';
                 document.getElementById('ai-status').classList.add('ai-thinking');
                 
@@ -608,7 +687,6 @@
                     const response = await this.callAI(message);
                     this.addChatMessage(response, 'ai');
                     
-                    // If AI returns code blocks, offer to apply them
                     if (response.includes('```')) {
                         this.addChatMessage('Would you like me to apply these changes to the current file? Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button>', 'ai');
                     }
@@ -622,9 +700,10 @@
 
             async callAI(message) {
                 const { provider, apiKey, model, endpoint } = this.ai;
+                const config = this.providers[provider];
                 
                 if (!apiKey && provider !== 'local') {
-                    throw new Error('Please configure your AI API key in Settings first.');
+                    throw new Error(`Please configure your ${config.name} API key in Settings first.`);
                 }
 
                 const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
@@ -632,32 +711,69 @@
                 
                 let url, body, headers;
 
-                if (provider === 'openai') {
-                    url = 'https://api.openai.com/v1/chat/completions';
-                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ model: model || 'gpt-4', messages: [{ role: 'user', content: context }] });
+                if (provider === 'openai' || provider === 'deepseek') {
+                    // Deepseek uses OpenAI-compatible format
+                    url = config.baseUrl;
+                    headers = { 
+                        'Authorization': `${config.authPrefix}${apiKey}`, 
+                        'Content-Type': 'application/json' 
+                    };
+                    body = JSON.stringify({ 
+                        model: model || config.model, 
+                        messages: [
+                            { role: 'system', content: 'You are a helpful coding assistant. Provide concise, working code solutions.' },
+                            { role: 'user', content: context }
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 4096
+                    });
                 } else if (provider === 'anthropic') {
-                    url = 'https://api.anthropic.com/v1/messages';
-                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-                    body = JSON.stringify({ model: model || 'claude-3-opus-20240229', max_tokens: 4096, messages: [{ role: 'user', content: context }] });
+                    url = config.baseUrl;
+                    headers = { 
+                        [config.authHeader]: apiKey, 
+                        'Content-Type': 'application/json',
+                        'anthropic-version': '2023-06-01'
+                    };
+                    body = JSON.stringify({ 
+                        model: model || config.model, 
+                        max_tokens: 4096, 
+                        messages: [{ role: 'user', content: context }] 
+                    });
                 } else if (provider === 'google') {
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-pro'}:generateContent?key=${apiKey}`;
+                    const modelName = model || config.model;
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
                     headers = { 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }] });
+                    body = JSON.stringify({ 
+                        contents: [{ parts: [{ text: context }] }],
+                        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+                    });
                 } else {
+                    // Local/custom endpoint
                     url = endpoint;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
                     body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
                 }
 
-                // Note: In production, this should go through a backend proxy to protect API keys
-                // For demo purposes, calling directly (CORS may block some providers)
                 const response = await fetch(url, { method: 'POST', headers, body });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(`API Error: ${error}`);
+                }
+                
                 const data = await response.json();
                 
-                if (provider === 'anthropic') return data.content[0].text;
-                if (provider === 'google') return data.candidates[0].content.parts[0].text;
-                return data.choices[0].message.content;
+                // Parse different response formats
+                if (provider === 'anthropic') {
+                    return data.content[0].text;
+                } else if (provider === 'google') {
+                    return data.candidates[0].content.parts[0].text;
+                } else if (provider === 'deepseek' || provider === 'openai') {
+                    return data.choices[0].message.content;
+                } else {
+                    // Local/OpenAI compatible
+                    return data.choices[0].message.content;
+                }
             },
 
             addChatMessage(text, sender) {
@@ -681,9 +797,8 @@
             },
 
             applyAIChanges() {
-                // Extract code blocks and apply to current file
                 const messages = document.getElementById('chat-messages').children;
-                const lastMessage = messages[messages.length - 2]; // Get AI response before the apply button
+                const lastMessage = messages[messages.length - 2];
                 const text = lastMessage.textContent;
                 
                 const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
@@ -728,7 +843,6 @@
                     return;
                 }
                 
-                // Verify token
                 try {
                     const response = await fetch('https://api.github.com/user', {
                         headers: { 'Authorization': `token ${token}` }
@@ -740,8 +854,6 @@
                         document.getElementById('github-status').textContent = repo;
                         this.closeModal('github-modal');
                         this.showToast('Connected to GitHub!');
-                        
-                        // Load repo contents
                         this.loadGitHubRepo();
                     } else {
                         alert('Invalid token or unable to connect');
@@ -762,7 +874,6 @@
                     
                     const data = await response.json();
                     
-                    // Clear current files and load from repo
                     this.files = {};
                     for (const item of data) {
                         if (item.type === 'file') {
@@ -776,7 +887,6 @@
                     this.renderFileTree();
                     this.showToast('Repository loaded!');
                     
-                    // Open first HTML file or any file
                     const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
                     if (firstHtml) this.openFile(firstHtml);
                     else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
@@ -800,7 +910,6 @@
                     if (fileData.type === 'folder') continue;
                     
                     try {
-                        // Get current file SHA if it exists
                         const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
                             headers: { 'Authorization': `token ${this.github.token}` }
                         });
@@ -811,7 +920,6 @@
                             sha = data.sha;
                         }
                         
-                        // Create or update file
                         const content = btoa(unescape(encodeURIComponent(fileData.content)));
                         const body = {
                             message: `Update ${filename} via DevStudio`,
@@ -844,14 +952,24 @@
 
             updateAISettings() {
                 const provider = document.getElementById('ai-provider').value;
+                const config = this.providers[provider];
+                
                 document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
+                
+                // Auto-fill default model if empty
+                const modelInput = document.getElementById('ai-model');
+                if (!modelInput.value || modelInput.value === this.providers[this.ai.provider]?.model) {
+                    modelInput.value = config.model;
+                }
                 
                 this.ai = {
                     provider,
                     apiKey: document.getElementById('ai-api-key').value,
-                    model: document.getElementById('ai-model').value,
+                    model: modelInput.value,
                     endpoint: document.getElementById('ai-endpoint').value
                 };
+                
+                this.updateProviderUI();
                 this.saveToStorage();
             },
 
@@ -935,7 +1053,7 @@
         <h2>Getting Started</h2>
         <ul>
             <li>Edit files in the left sidebar</li>
-            <li>Use the AI chat for help</li>
+            <li>Use the AI chat for help (supports OpenAI, Claude, Gemini, Deepseek)</li>
             <li>Save checkpoints to track changes</li>
             <li>Connect GitHub to sync</li>
         </ul>
@@ -963,7 +1081,6 @@ console.log('Hello from DevStudio!');`,
             },
 
             exportProject() {
-                // Create a simple zip-like download (in real app, use JSZip library)
                 let content = '';
                 for (const [name, data] of Object.entries(this.files)) {
                     if (data.type === 'file') {
@@ -1032,7 +1149,6 @@ console.log('Hello from DevStudio!');`,
             },
 
             setupAutoSave() {
-                // Auto-save every 30 seconds
                 setInterval(() => {
                     if (this.currentFile) {
                         this.saveToStorage();
@@ -1044,7 +1160,6 @@ console.log('Hello from DevStudio!');`,
         // Initialize on load
         window.addEventListener('DOMContentLoaded', () => app.init());
         
-        // Handle window resize
         window.addEventListener('resize', () => {
             if (app.editor) app.editor.layout();
         });
