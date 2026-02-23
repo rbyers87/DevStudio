@@ -1,1271 +1,3386 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DevStudio - AI-Powered Development Environment</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-        
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: #0f172a;
-            color: #e2e8f0;
-            overflow: hidden;
-        }
-        
-        /* Main Grid Layout */
-        .app-grid {
-            display: grid;
-            grid-template-rows: 56px 1fr;
-            grid-template-columns: 260px 1fr 350px;
-            grid-template-areas: 
-                "header header header"
-                "sidebar editor preview";
-            height: 100vh;
-            width: 100vw;
-        }
-        
-        /* Header */
-        .header {
-            grid-area: header;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 16px;
-            z-index: 50;
-        }
-        
-        /* Sidebar */
-        .sidebar {
-            grid-area: sidebar;
-            background: #1e293b;
-            border-right: 1px solid #334155;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .sidebar-top {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
-        }
-        
-        .sidebar-bottom {
-            height: 200px;
-            border-top: 1px solid #334155;
-            overflow-y: auto;
-            padding: 8px;
-        }
-        
-        /* Editor Section */
-        .editor-section {
-            grid-area: editor;
-            display: flex;
-            flex-direction: column;
-            background: #0f172a;
-            overflow: hidden;
-            min-width: 0;
-        }
-        
-        .tabs-bar {
-            height: 36px;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            display: flex;
-            overflow-x: auto;
-            overflow-y: hidden;
-        }
-        
-        .tab {
-            height: 36px;
-            padding: 0 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border-right: 1px solid #334155;
-            cursor: pointer;
-            white-space: nowrap;
-            font-size: 13px;
-            background: #1e293b;
-            color: #94a3b8;
-        }
-        
-        .tab.active {
-            background: #334155;
-            color: #f8fafc;
-            border-top: 2px solid #3b82f6;
-        }
-        
-        .editor-container {
-            flex: 1;
-            position: relative;
-            overflow: hidden;
-            min-height: 0;
-        }
-        
-        #monaco-editor {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-        }
-        
-        .chat-panel {
-            height: 220px;
-            border-top: 1px solid #334155;
-            background: #1e293b;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .chat-header {
-            height: 32px;
-            padding: 0 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #334155;
-            cursor: pointer;
-            background: #252f47;
-        }
-        
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 12px;
-        }
-        
-        .chat-input-area {
-            padding: 12px;
-            border-top: 1px solid #334155;
-        }
-        
-        /* Preview Section */
-        .preview-section {
-            grid-area: preview;
-            background: #1e293b;
-            border-left: 1px solid #334155;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .preview-header {
-            height: 36px;
-            padding: 0 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #334155;
-            background: #1e293b;
-        }
-        
-        .preview-content {
-            flex: 1;
-            position: relative;
-            background: white;
-            overflow: hidden;
-        }
-        
-        #preview-frame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: block;
-        }
-        
-        /* Chat Bubbles */
-        .chat-bubble {
-            max-width: 85%;
-            padding: 10px 14px;
-            border-radius: 12px;
-            margin-bottom: 8px;
-            font-size: 13px;
-            line-height: 1.4;
-        }
-        
-        .chat-bubble.user {
-            background: #3b82f6;
-            color: white;
-            margin-left: auto;
-        }
-        
-        .chat-bubble.ai {
-            background: #334155;
-            color: #e2e8f0;
-        }
-        
-        /* File Tree */
-        .file-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            margin-bottom: 2px;
-            color: #cbd5e1;
-        }
-        
-        .file-item:hover {
-            background: #334155;
-        }
-        
-        .file-item.active {
-            background: #3b82f6;
-            color: white;
-        }
-        
-        /* Version Items */
-        .version-item {
-            display: flex;
-            gap: 8px;
-            padding: 8px;
-            cursor: pointer;
-            border-radius: 4px;
-            margin-bottom: 4px;
-        }
-        
-        .version-item:hover {
-            background: #334155;
-        }
-        
-        .version-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #64748b;
-            margin-top: 4px;
-            flex-shrink: 0;
-        }
-        
-        .version-dot.active {
-            background: #10b981;
-        }
-        
-        .version-line {
-            width: 2px;
-            background: #475569;
-            margin-left: 4px;
-            flex-grow: 1;
-            min-height: 20px;
-        }
-        
-        /* Modals */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 100;
-            padding: 20px;
-        }
-        
-        .modal.hidden { display: none; }
-        
-        .modal-box {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            width: 100%;
-            max-width: 480px;
-            max-height: 90vh;
-            overflow-y: auto;
-            padding: 24px;
-        }
-        
-        /* Buttons */
-        .btn {
-            padding: 8px 16px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-        
-        .btn-primary {
-            background: #3b82f6;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #2563eb;
-        }
-        
-        .btn-secondary {
-            background: #334155;
-            color: #e2e8f0;
-        }
-        
-        .btn-secondary:hover {
-            background: #475569;
-        }
-        
-        /* Inputs */
-        .input {
-            width: 100%;
-            padding: 8px 12px;
-            background: #0f172a;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            color: #e2e8f0;
-            font-size: 14px;
-            margin-top: 4px;
-        }
-        
-        .input:focus {
-            outline: none;
-            border-color: #3b82f6;
-        }
-        
-        /* Utility */
-        .truncate {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        .flex { display: flex; }
-        .items-center { align-items: center; }
-        .justify-between { justify-content: space-between; }
-        .gap-2 { gap: 8px; }
-        .gap-3 { gap: 12px; }
-        .text-xs { font-size: 12px; }
-        .text-sm { font-size: 14px; }
-        .font-semibold { font-weight: 600; }
-        .text-gray-400 { color: #94a3b8; }
-        .text-gray-500 { color: #64748b; }
-        .mb-2 { margin-bottom: 8px; }
-        .mb-4 { margin-bottom: 16px; }
-        .mt-2 { margin-top: 8px; }
-        .mt-4 { margin-top: 16px; }
-        .p-2 { padding: 8px; }
-        .rounded { border-radius: 6px; }
-        
-        /* Provider Badge */
-        .provider-badge {
-            font-size: 11px;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-weight: 600;
-        }
-        
-        .badge-openai { background: #10a37f; color: white; }
-        .badge-anthropic { background: #d4a574; color: #1a1a1a; }
-        .badge-google { background: #4285f4; color: white; }
-        .badge-deepseek { background: #4f46e5; color: white; }
-        .badge-local { background: #64748b; color: white; }
-        
-        /* Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
-        
-        /* Empty State */
-        .empty-state {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #64748b;
-        }
-        
-        /* Toast */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: #1e293b;
-            border: 1px solid #334155;
-            padding: 12px 20px;
-            border-radius: 8px;
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
-            z-index: 200;
-            animation: slideIn 0.3s ease;
-        }
-        
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevStudio - AI-Powered Development Environment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+        }
+        
+        html, body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0f172a !important;
+            color: #e2e8f0 !important;
+            overflow: hidden;
+            height: 100%;
+            width: 100%;
+        }
+        
+        /* Force dark background on all elements */
+        #app {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        
+        /* Main Grid Layout */
+        .app-grid {
+            display: grid;
+            grid-template-rows: 56px 1fr;
+            grid-template-columns: 260px 1fr 350px;
+            grid-template-areas: 
+                "header header header"
+                "sidebar editor preview";
+            height: 100vh;
+            width: 100vw;
+            background-color: #0f172a;
+        }
+        
+        /* Header */
+        .header {
+            grid-area: header;
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 50;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            grid-area: sidebar;
+            background-color: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sidebar-top {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            background-color: #1e293b;
+        }
+        
+        .sidebar-bottom {
+            height: 200px;
+            border-top: 1px solid #334155;
+            overflow-y: auto;
+            padding: 8px;
+            background-color: #1e293b;
+        }
+        
+        /* Editor Section */
+        .editor-section {
+            grid-area: editor;
+            display: flex;
+            flex-direction: column;
+            background-color: #0f172a;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .tabs-bar {
+            height: 36px;
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        .tab {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #334155;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            background-color: #1e293b;
+            color: #94a3b8;
+        }
+        
+        .tab.active {
+            background-color: #334155;
+            color: #f8fafc;
+            border-top: 2px solid #3b82f6;
+        }
+        
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+            background-color: #0f172a;
+        }
+        
+        #monaco-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0f172a;
+        }
+        
+        .chat-panel {
+            height: 220px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            height: 32px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            background-color: #252f47;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background-color: #1e293b;
+        }
+        
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            grid-area: preview;
+            background-color: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .preview-header {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        .preview-content {
+            flex: 1;
+            position: relative;
+            background-color: white;
+            overflow: hidden;
+        }
+        
+        #preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background-color: white;
+        }
+        
+        /* Chat Bubbles */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .chat-bubble.user {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .chat-bubble.ai {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        /* File Tree */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 2px;
+            color: #cbd5e1;
+            background-color: transparent;
+        }
+        
+        .file-item:hover {
+            background-color: #334155;
+        }
+        
+        .file-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        /* Version Items */
+        .version-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background-color: transparent;
+        }
+        
+        .version-item:hover {
+            background-color: #334155;
+        }
+        
+        .version-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #64748b;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        
+        .version-dot.active {
+            background-color: #10b981;
+        }
+        
+        .version-line {
+            width: 2px;
+            background-color: #475569;
+            margin-left: 4px;
+            flex-grow: 1;
+            min-height: 20px;
+        }
+        
+        /* Modals */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        
+        .modal.hidden { 
+            display: none !important; 
+        }
+        
+        .modal-box {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+            color: #e2e8f0;
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-secondary {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+        
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: 8px 12px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        /* Utility */
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; }
+        .text-sm { font-size: 14px; }
+        .font-semibold { font-weight: 600; }
+        .text-gray-400 { color: #94a3b8; }
+        .text-gray-500 { color: #64748b; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-2 { padding: 8px; }
+        .rounded { border-radius: 6px; }
+        
+        /* Provider Badge */
+        .provider-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-openai { background-color: #10a37f; color: white; }
+        .badge-anthropic { background-color: #d4a574; color: #1a1a1a; }
+        .badge-google { background-color: #4285f4; color: white; }
+        .badge-deepseek { background-color: #4f46e5; color: white; }
+        .badge-local { background-color: #64748b; color: white; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background-color: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+        
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background-color: #0f172a;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+            color: #e2e8f0;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Ensure text is visible */
+        h1, h2, h3, p, span, div {
+            color: inherit;
+        }
+    </style>
 </head>
 <body>
 
-    <div class="app-grid">
-        <!-- Header -->
-        <header class="header">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                    <i class="fas fa-code text-white text-sm"></i>
-                </div>
-                <h1 class="font-semibold text-lg">DevStudio</h1>
-                <span class="text-xs bg-slate-700 px-2 py-1 rounded text-gray-400">v1.0</span>
-                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
-            </div>
+    <div id="app" class="app-grid">
+        <!-- Header -->
+        <header class="header">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-code text-white text-sm"></i>
+                </div>
+                <h1 class="font-semibold text-lg" style="color: #f8fafc;">DevStudio</h1>
+                <span class="text-xs bg-slate-700 px-2 py-1 rounded" style="color: #94a3b8;">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
+            </div>
 
-            <div class="flex items-center gap-2">
-                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg text-gray-400" title="Settings">
-                    <i class="fas fa-cog"></i>
-                </button>
-                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
-                    <i class="fab fa-github"></i>
-                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
-                </button>
-                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <span>Sync</span>
-                </button>
-            </div>
-        </header>
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg" style="color: #94a3b8;" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" style="color: #e2e8f0;">
+                    <i class="fab fa-github"></i>
+                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Sync</span>
+                </button>
+            </div>
+        </header>
 
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="sidebar-top">
-                <div class="flex items-center justify-between p-2 mb-2">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Explorer</span>
-                    <div class="flex gap-1">
-                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="New File">
-                            <i class="fas fa-file-medical text-xs"></i>
-                        </button>
-                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="New Folder">
-                            <i class="fas fa-folder-plus text-xs"></i>
-                        </button>
-                    </div>
-                </div>
-                <div id="file-tree">
-                    <!-- Files rendered here -->
-                </div>
-            </div>
-            
-            <div class="sidebar-bottom">
-                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
-                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">
-                        <i class="fas fa-save mr-1"></i>Save
-                    </button>
-                </div>
-                <div id="version-list">
-                    <!-- Versions rendered here -->
-                </div>
-            </div>
-        </aside>
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="flex items-center justify-between p-2 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Explorer</span>
+                    <div class="flex gap-1">
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New File">
+                            <i class="fas fa-file-medical text-xs"></i>
+                        </button>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="file-tree">
+                    <!-- Files rendered here -->
+                </div>
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                </div>
+                <div id="version-list">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
 
-        <!-- Editor Section -->
-        <section class="editor-section">
-            <div class="tabs-bar" id="tabs-container">
-                <!-- Tabs rendered here -->
-            </div>
-            
-            <div class="editor-container">
-                <div id="monaco-editor"></div>
-                <div id="empty-state" class="empty-state hidden">
-                    <div class="text-center">
-                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
-                        <p>Select a file to start editing</p>
-                    </div>
-                </div>
-            </div>
+        <!-- Editor Section -->
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="text-center">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
 
-            <div class="chat-panel" id="chat-panel">
-                <div class="chat-header" onclick="app.toggleChat()">
-                    <div class="flex items-center gap-2">
-                        <i class="fas fa-robot text-blue-400 text-xs"></i>
-                        <span class="text-xs font-semibold">AI Assistant</span>
-                        <span id="ai-status" class="text-[10px] bg-slate-700 px-1.5 rounded text-gray-400">Ready</span>
-                    </div>
-                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
-                </div>
-                <div class="chat-messages" id="chat-messages">
-                    <div class="chat-bubble ai">
-                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
-                    </div>
-                </div>
-                <div class="chat-input-area">
-                    <div class="flex gap-2 mb-2">
-                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
-                               onkeypress="if(event.key==='Enter') app.sendMessage()">
-                        <button onclick="app.sendMessage()" class="btn btn-primary">
-                            <i class="fas fa-paper-plane text-xs"></i>
-                        </button>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Explain</button>
-                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
-                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Optimize</button>
-                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
-                    </div>
-                </div>
-            </div>
-        </section>
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-semibold" style="color: #e2e8f0;">AI Assistant</span>
+                        <span id="ai-status" class="text-xs bg-slate-700 px-1.5 rounded" style="color: #94a3b8;">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">
+                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary">
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Explain</button>
+                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-        <!-- Preview Section -->
-        <section class="preview-section">
-            <div class="preview-header">
-                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
-                <div class="flex gap-2">
-                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="Refresh">
-                        <i class="fas fa-sync-alt text-xs"></i>
-                    </button>
-                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="Open in New Tab">
-                        <i class="fas fa-external-link-alt text-xs"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="preview-content">
-                <iframe id="preview-frame"></iframe>
-            </div>
-        </section>
-    </div>
+        <!-- Preview Section -->
+        <section class="preview-section">
+            <div class="preview-header">
+                <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="preview-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
+    </div>
 
-    <!-- Modals -->
-    
-    <!-- GitHub Modal -->
-    <div id="github-modal" class="modal hidden">
-        <div class="modal-box">
-            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
-                <i class="fab fa-github"></i> Connect to GitHub
-            </h2>
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">Personal Access Token</label>
-                <input type="password" id="github-token" class="input" placeholder="ghp_...">
-                <p class="text-xs text-gray-500 mt-1">Create at GitHub Settings > Developer settings > Personal access tokens</p>
-            </div>
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">Repository (owner/repo)</label>
-                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
-            </div>
-            <div class="flex gap-2 mt-4">
-                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
-                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary flex-1">Cancel</button>
-            </div>
-        </div>
-    </div>
+    <!-- Modals -->
+    
+    <!-- GitHub Modal -->
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" style="color: #f8fafc;">
+                <i class="fab fa-github"></i> Connect to GitHub
+            </h2>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p class="text-xs mt-1" style="color: #64748b;">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn        }
+        
+        /* Editor Section */
+        .editor-section {
+            grid-area: editor;
+            display: flex;
+            flex-direction: column;
+            background-color: #0f172a;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .tabs-bar {
+            height: 36px;
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        .tab {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #334155;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            background-color: #1e293b;
+            color: #94a3b8;
+        }
+        
+        .tab.active {
+            background-color: #334155;
+            color: #f8fafc;
+            border-top: 2px solid #3b82f6;
+        }
+        
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+            background-color: #0f172a;
+        }
+        
+        #monaco-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0f172a;
+        }
+        
+        .chat-panel {
+            height: 220px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            height: 32px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            background-color: #252f47;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background-color: #1e293b;
+        }
+        
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            grid-area: preview;
+            background-color: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .preview-header {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        .preview-content {
+            flex: 1;
+            position: relative;
+            background-color: white;
+            overflow: hidden;
+        }
+        
+        #preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background-color: white;
+        }
+        
+        /* Chat Bubbles */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .chat-bubble.user {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .chat-bubble.ai {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        /* File Tree */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 2px;
+            color: #cbd5e1;
+            background-color: transparent;
+        }
+        
+        .file-item:hover {
+            background-color: #334155;
+        }
+        
+        .file-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        /* Version Items */
+        .version-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background-color: transparent;
+        }
+        
+        .version-item:hover {
+            background-color: #334155;
+        }
+        
+        .version-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #64748b;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        
+        .version-dot.active {
+            background-color: #10b981;
+        }
+        
+        .version-line {
+            width: 2px;
+            background-color: #475569;
+            margin-left: 4px;
+            flex-grow: 1;
+            min-height: 20px;
+        }
+        
+        /* Modals */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        
+        .modal.hidden { 
+            display: none !important; 
+        }
+        
+        .modal-box {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+            color: #e2e8f0;
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-secondary {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+        
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: 8px 12px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        /* Utility */
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; }
+        .text-sm { font-size: 14px; }
+        .font-semibold { font-weight: 600; }
+        .text-gray-400 { color: #94a3b8; }
+        .text-gray-500 { color: #64748b; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-2 { padding: 8px; }
+        .rounded { border-radius: 6px; }
+        
+        /* Provider Badge */
+        .provider-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-openai { background-color: #10a37f; color: white; }
+        .badge-anthropic { background-color: #d4a574; color: #1a1a1a; }
+        .badge-google { background-color: #4285f4; color: white; }
+        .badge-deepseek { background-color: #4f46e5; color: white; }
+        .badge-local { background-color: #64748b; color: white; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background-color: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+        
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background-color: #0f172a;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+            color: #e2e8f0;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Ensure text is visible */
+        h1, h2, h3, p, span, div {
+            color: inherit;
+        }
+    </style>
+</head>
+<body>
 
-    <!-- Settings Modal -->
-    <div id="settings-modal" class="modal hidden">
-        <div class="modal-box">
-            <h2 class="text-xl font-semibold mb-4">Settings</h2>
-            
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">AI Provider</label>
-                <select id="ai-provider" class="input" onchange="app.updateAISettings()">
-                    <option value="openai">OpenAI (GPT-4)</option>
-                    <option value="anthropic">Anthropic (Claude)</option>
-                    <option value="google">Google (Gemini)</option>
-                    <option value="deepseek">Deepseek (V3/R1)</option>
-                    <option value="local">Local/Custom</option>
-                </select>
-                <p class="text-xs text-gray-500 mt-1" id="provider-help">Get your key from platform.openai.com</p>
-            </div>
-            
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">API Key</label>
-                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
-            </div>
-            
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">Model</label>
-                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc.">
-                <p class="text-xs text-gray-500 mt-1">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
-            </div>
-            
-            <div id="local-endpoint-container" class="mb-4 hidden">
-                <label class="text-sm text-gray-400">Custom Endpoint</label>
-                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
-            </div>
-            
-            <div class="mb-4">
-                <label class="text-sm text-gray-400">Editor Theme</label>
-                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
-                    <option value="vs-dark">Dark</option>
-                    <option value="vs">Light</option>
-                    <option value="hc-black">High Contrast</option>
-                </select>
-            </div>
-            
-            <div class="flex gap-2 mt-4">
-                <button onclick="app.exportProject()" class="btn btn-secondary flex-1">
-                    <i class="fas fa-download mr-2"></i>Export
-                </button>
-                <button onclick="app.clearAllData()" class="btn btn-secondary flex-1 text-red-400">
-                    <i class="fas fa-trash mr-2"></i>Clear Data
-                </button>
-            </div>
-            
-            <button onclick="app.closeModal('settings-modal')" class="btn btn-secondary w-full mt-4">Close</button>
-        </div>
-    </div>
+    <div id="app" class="app-grid">
+        <!-- Header -->
+        <header class="header">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-code text-white text-sm"></i>
+                </div>
+                <h1 class="font-semibold text-lg" style="color: #f8fafc;">DevStudio</h1>
+                <span class="text-xs bg-slate-700 px-2 py-1 rounded" style="color: #94a3b8;">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
+            </div>
 
-    <!-- New File Modal -->
-    <div id="new-file-modal" class="modal hidden">
-        <div class="modal-box" style="max-width: 320px;">
-            <h3 class="text-lg font-semibold mb-3">Create New File</h3>
-            <input type="text" id="new-file-name" class="input mb-4" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
-            <div class="flex gap-2">
-                <button onclick="app.confirmCreateFile()" class="btn btn-primary flex-1">Create</button>
-                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary flex-1">Cancel</button>
-            </div>
-        </div>
-    </div>
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg" style="color: #94a3b8;" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" style="color: #e2e8f0;">
+                    <i class="fab fa-github"></i>
+                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Sync</span>
+                </button>
+            </div>
+        </header>
 
-    <script>
-        const app = {
-            editor: null,
-            currentFile: null,
-            files: {},
-            versions: [],
-            github: { token: null, repo: null, connected: false },
-            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
-            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
-            chatCollapsed: false,
-            
-            providers: {
-                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', badge: 'badge-openai', help: 'Get your key from platform.openai.com' },
-                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', badge: 'badge-anthropic', help: 'Get your key from console.anthropic.com' },
-                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', badge: 'badge-google', help: 'Get your key from makersuite.google.com' },
-                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', badge: 'badge-deepseek', help: 'Get your key from platform.deepseek.com' },
-                local: { name: 'Local', baseUrl: '', model: 'local-model', badge: 'badge-local', help: 'Enter your local endpoint URL' }
-            },
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="flex items-center justify-between p-2 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Explorer</span>
+                    <div class="flex gap-1">
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New File">
+                            <i class="fas fa-file-medical text-xs"></i>
+                        </button>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="file-tree">
+                    <!-- Files rendered here -->
+                </div>
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                </div>
+                <div id="version-list">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
 
-            init() {
-                this.loadFromStorage();
-                this.initMonaco();
-                this.renderFileTree();
-                this.renderVersions();
-                this.setupAutoSave();
-                this.updateProviderUI();
-                
-                document.getElementById('ai-provider').value = this.ai.provider;
-                document.getElementById('ai-api-key').value = this.ai.apiKey;
-                document.getElementById('ai-model').value = this.ai.model;
-                document.getElementById('ai-endpoint').value = this.ai.endpoint;
-                
-                if (this.github.connected) {
-                    document.getElementById('github-status').textContent = this.github.repo;
-                }
-            },
+        <!-- Editor Section -->
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="text-center">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
 
-            initMonaco() {
-                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
-                
-                require(['vs/editor/editor.main'], () => {
-                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
-                        value: '',
-                        language: 'javascript',
-                        theme: this.settings.theme,
-                        fontSize: this.settings.fontSize,
-                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
-                        automaticLayout: true,
-                        minimap: { enabled: true },
-                        scrollBeyondLastLine: false,
-                        fixedOverflowWidgets: true
-                    });
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-semibold" style="color: #e2e8f0;">AI Assistant</span>
+                        <span id="ai-status" class="text-xs bg-slate-700 px-1.5 rounded" style="color: #94a3b8;">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">
+                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary">
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Explain</button>
+                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-                    let timeout;
-                    this.editor.onDidChangeModelContent(() => {
-                        if (this.currentFile) {
-                            clearTimeout(timeout);
-                            timeout = setTimeout(() => {
-                                this.files[this.currentFile].content = this.editor.getValue();
-                                this.saveToStorage();
-                                if (this.isPreviewable(this.currentFile)) {
-                                    this.updatePreview();
-                                }
-                            }, 1000);
-                        }
-                    });
-                });
-            },
+        <!-- Preview Section -->
+        <section class="preview-section">
+            <div class="preview-header">
+                <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="preview-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
+    </div>
 
-            updateProviderUI() {
-                const p = this.providers[this.ai.provider];
-                const badge = document.getElementById('active-provider');
-                if (badge) {
-                    badge.className = `provider-badge ${p.badge}`;
-                    badge.textContent = p.name;
-                    badge.classList.remove('hidden');
-                }
-                const help = document.getElementById('provider-help');
-                if (help) help.textContent = p.help;
-            },
+    <!-- Modals -->
+    
+    <!-- GitHub Modal -->
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" style="color: #f8fafc;">
+                <i class="fab fa-github"></i> Connect to GitHub
+            </h2>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p class="text-xs mt-1" style="color: #64748b;">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-            createFile() {
-                document.getElementById('new-file-modal').classList.remove('hidden');
-                document.getElementById('new-file-name').focus();
-            },
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4" style="color: #f8fafc;">Settings</h2>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">AI Provider</label>
+                <select id="ai-provider" class="input" onchange="app.updateAISettings()">
+                    <option value="openai">OpenAI (GPT-4)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="deepseek">Deepseek (V3/R1)</option>
+                    <option value="local">Local/Custom</option>
+                </select>
+                <p class="text-xs mt-1" style="color: #64748b;" id="provider-help">Get your key from platform.openai.com</p>
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">API Key</label>
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Model</label>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc.">
+                <p class="text-xs mt-1" style="color: #64748b;">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
+            </div>
+            
+            <div id="local-endpoint-container" class="mb-4 hidden">
+                <label class="text-sm" style="color: #94a3b8;">Custom Endpoint</label>
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Editor Theme</label>
+                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
+                    <option value="vs-dark">Dark</option>
+                    <option value="vs">Light</option>
+                    <option value="hc-black">High Contrast</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.exportProject()" class="btn btn-secondary flex-1">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button onclick="app.clearAllData()" class="btn btn-secondary flex-1" style="color: #f87171;">
+                    <i class="fas fa-trash mr-2"></i>Clear Data
+                </button>
+            </div>
+            
+            <button onclick="app.closeModal('settings-modal')" class="btn btn-secondary w-full mt-4">Close</button>
+        </div>
+    </div>
 
-            confirmCreateFile() {
-                const name = document.getElementById('new-file-name').value.trim();
-                if (name && !this.files[name]) {
-                    this.files[name] = { content: '', type: 'file' };
-                    this.saveToStorage();
-                    this.renderFileTree();
-                    this.openFile(name);
-                    this.closeModal('new-file-modal');
-                    document.getElementById('new-file-name').value = '';
-                }
-            },
+    <!-- New File Modal -->
+    <div id="new-file-modal" class="modal hidden">
+        <div class="modal-box" style="max-width: 320px;">
+            <h3 class="text-lg font-semibold mb-3" style="color: #f8fafc;">Create New File</h3>
+            <input type="text" id="new-file-name" class="input mb-4" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <div class="flex gap-2">
+                <button onclick="app.confirmCreateFile()" class="btn btn-primary flex-1">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-            createFolder() {
-                const name = prompt('Folder name:');
-                if (name) {
-                    this.files[name + '/'] = { content: null, type: 'folder' };
-                    this.saveToStorage();
-                    this.renderFileTree();
-                }
-            },
+    <script>
+        const app = {
+            editor: null,
+            currentFile: null,
+            files: {},
+            versions: [],
+            github: { token: null, repo: null, connected: false },
+            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
+            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
+            chatCollapsed: false,
+            
+            providers: {
+                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', badge: 'badge-openai', help: 'Get your key from platform.openai.com' },
+                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', badge: 'badge-anthropic', help: 'Get your key from console.anthropic.com' },
+                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', badge: 'badge-google', help: 'Get your key from makersuite.google.com' },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', badge: 'badge-deepseek', help: 'Get your key from platform.deepseek.com' },
+                local: { name: 'Local', baseUrl: '', model: 'local-model', badge: 'badge-local', help: 'Enter your local endpoint URL' }
+            },
 
-            openFile(filename) {
-                if (this.files[filename]?.type === 'folder') return;
-                
-                this.currentFile = filename;
-                document.getElementById('empty-state').classList.add('hidden');
-                
-                if (this.editor) {
-                    const model = monaco.editor.createModel(
-                        this.files[filename]?.content || '',
-                        this.getLanguage(filename)
-                    );
-                    this.editor.setModel(model);
-                }
-                
-                this.renderTabs();
-                this.renderFileTree();
-                
-                if (this.isPreviewable(filename)) {
-                    this.updatePreview();
-                }
-            },
+            init() {
+                this.loadFromStorage();
+                this.initMonaco();
+                this.renderFileTree();
+                this.renderVersions();
+                this.setupAutoSave();
+                this.updateProviderUI();
+                
+                document.getElementById('ai-provider').value = this.ai.provider;
+                document.getElementById('ai-api-key').value = this.ai.apiKey;
+                document.getElementById('ai-model').value = this.ai.model;
+                document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                if (this.github.connected) {
+                    document.getElementById('github-status').textContent = this.github.repo;
+                }
+            },
 
-            closeFile(filename) {
-                delete this.files[filename];
-                if (this.currentFile === filename) {
-                    const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
-                    this.currentFile = remaining[0] || null;
-                    if (this.currentFile) {
-                        this.openFile(this.currentFile);
-                    } else {
-                        if (this.editor) this.editor.setValue('');
-                        document.getElementById('empty-state').classList.remove('hidden');
-                    }
-                }
-                this.saveToStorage();
-                this.renderTabs();
-                this.renderFileTree();
-            },
+            initMonaco() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                
+                require(['vs/editor/editor.main'], () => {
+                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+                        value: '',
+                        language: 'javascript',
+                        theme: this.settings.theme,
+                        fontSize: this.settings.fontSize,
+                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
+                        automaticLayout: true,
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        fixedOverflowWidgets: true
+                    });
 
-            getLanguage(filename) {
-                const ext = filename.split('.').pop();
-                const map = { 'js': 'javascript', 'ts': 'typescript', 'html': 'html', 'css': 'css', 'json': 'json', 'py': 'python', 'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript' };
-                return map[ext] || 'plaintext';
-            },
+                    let timeout;
+                    this.editor.onDidChangeModelContent(() => {
+                        if (this.currentFile) {
+                            clearTimeout(timeout);
+                            timeout = setTimeout(() => {
+                                this.files[this.currentFile].content = this.editor.getValue();
+                                this.saveToStorage();
+                                if (this.isPreviewable(this.currentFile)) {
+                                    this.updatePreview();
+                                }
+                            }, 1000);
+                        }
+                    });
+                });
+            },
 
-            isPreviewable(filename) {
-                return filename.endsWith('.html') || filename.endsWith('.htm');
-            },
+            updateProviderUI() {
+                const p = this.providers[this.ai.provider];
+                const badge = document.getElementById('active-provider');
+                if (badge) {
+                    badge.className = `provider-badge ${p.badge}`;
+                    badge.textContent = p.name;
+                    badge.classList.remove('hidden');
+                }
+                const help = document.getElementById('provider-help');
+                if (help) help.textContent = p.help;
+            },
 
-            renderFileTree() {
-                const container = document.getElementById('file-tree');
-                container.innerHTML = '';
-                
-                Object.keys(this.files).sort().forEach(filename => {
-                    const div = document.createElement('div');
-                    const isActive = this.currentFile === filename;
-                    div.className = `file-item ${isActive ? 'active' : ''}`;
-                    
-                    const isFolder = this.files[filename].type === 'folder';
-                    const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
-                    
-                    div.innerHTML = `
-                        <i class="fas ${icon} w-4 text-center text-xs"></i>
-                        <span class="flex-1 truncate">${filename}</span>
-                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 hover:text-red-400 p-1"><i class="fas fa-times text-xs"></i></button>` : ''}
-                    `;
-                    
-                    div.onclick = () => this.openFile(filename);
-                    div.classList.add('group');
-                    container.appendChild(div);
-                });
-            },
+            createFile() {
+                document.getElementById('new-file-modal').classList.remove('hidden');
+                document.getElementById('new-file-name').focus();
+            },
 
-            getFileIcon(filename) {
-                if (filename.endsWith('.js')) return 'fa-js text-yellow-400';
-                if (filename.endsWith('.html')) return 'fa-html5 text-orange-500';
-                if (filename.endsWith('.css')) return 'fa-css3 text-blue-400';
-                if (filename.endsWith('.json')) return 'fa-cog text-gray-400';
-                return 'fa-file-code text-gray-400';
-            },
+            confirmCreateFile() {
+                const name = document.getElementById('new-file-name').value.trim();
+                if (name && !this.files[name]) {
+                    this.files[name] = { content: '', type: 'file' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.openFile(name);
+                    this.closeModal('new-file-modal');
+                    document.getElementById('new-file-name').value = '';
+                }
+            },
 
-            renderTabs() {
-                const container = document.getElementById('tabs-container');
-                container.innerHTML = '';
-                
-                Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
-                    const tab = document.createElement('div');
-                    tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
-                    tab.innerHTML = `
-                        <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
-                        <span class="truncate max-w-[100px]">${filename}</span>
-                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1"><i class="fas fa-times text-xs"></i></button>
-                    `;
-                    tab.onclick = () => this.openFile(filename);
-                    container.appendChild(tab);
-                });
-            },
+            createFolder() {
+                const name = prompt('Folder name        }
+        
+        /* Editor Section */
+        .editor-section {
+            grid-area: editor;
+            display: flex;
+            flex-direction: column;
+            background-color: #0f172a;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .tabs-bar {
+            height: 36px;
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        .tab {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #334155;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            background-color: #1e293b;
+            color: #94a3b8;
+        }
+        
+        .tab.active {
+            background-color: #334155;
+            color: #f8fafc;
+            border-top: 2px solid #3b82f6;
+        }
+        
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+            background-color: #0f172a;
+        }
+        
+        #monaco-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0f172a;
+        }
+        
+        .chat-panel {
+            height: 220px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            height: 32px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            background-color: #252f47;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background-color: #1e293b;
+        }
+        
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            grid-area: preview;
+            background-color: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .preview-header {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        .preview-content {
+            flex: 1;
+            position: relative;
+            background-color: white;
+            overflow: hidden;
+        }
+        
+        #preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background-color: white;
+        }
+        
+        /* Chat Bubbles */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .chat-bubble.user {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .chat-bubble.ai {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        /* File Tree */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 2px;
+            color: #cbd5e1;
+            background-color: transparent;
+        }
+        
+        .file-item:hover {
+            background-color: #334155;
+        }
+        
+        .file-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        /* Version Items */
+        .version-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background-color: transparent;
+        }
+        
+        .version-item:hover {
+            background-color: #334155;
+        }
+        
+        .version-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #64748b;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        
+        .version-dot.active {
+            background-color: #10b981;
+        }
+        
+        .version-line {
+            width: 2px;
+            background-color: #475569;
+            margin-left: 4px;
+            flex-grow: 1;
+            min-height: 20px;
+        }
+        
+        /* Modals */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        
+        .modal.hidden { 
+            display: none !important; 
+        }
+        
+        .modal-box {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+            color: #e2e8f0;
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-secondary {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+        
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: 8px 12px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        /* Utility */
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; }
+        .text-sm { font-size: 14px; }
+        .font-semibold { font-weight: 600; }
+        .text-gray-400 { color: #94a3b8; }
+        .text-gray-500 { color: #64748b; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-2 { padding: 8px; }
+        .rounded { border-radius: 6px; }
+        
+        /* Provider Badge */
+        .provider-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-openai { background-color: #10a37f; color: white; }
+        .badge-anthropic { background-color: #d4a574; color: #1a1a1a; }
+        .badge-google { background-color: #4285f4; color: white; }
+        .badge-deepseek { background-color: #4f46e5; color: white; }
+        .badge-local { background-color: #64748b; color: white; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background-color: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+        
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background-color: #0f172a;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+            color: #e2e8f0;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Ensure text is visible */
+        h1, h2, h3, p, span, div {
+            color: inherit;
+        }
+    </style>
+</head>
+<body>
 
-            createCheckpoint() {
-                const checkpoint = {
-                    id: Date.now(),
-                    timestamp: new Date().toISOString(),
-                    message: `Checkpoint ${this.versions.length + 1}`,
-                    files: JSON.parse(JSON.stringify(this.files))
-                };
-                
-                this.versions.unshift(checkpoint);
-                if (this.versions.length > 20) this.versions.pop();
-                
-                this.saveToStorage();
-                this.renderVersions();
-                this.showToast('Checkpoint saved!');
-            },
+    <div id="app" class="app-grid">
+        <!-- Header -->
+        <header class="header">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-code text-white text-sm"></i>
+                </div>
+                <h1 class="font-semibold text-lg" style="color: #f8fafc;">DevStudio</h1>
+                <span class="text-xs bg-slate-700 px-2 py-1 rounded" style="color: #94a3b8;">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
+            </div>
 
-            restoreVersion(id) {
-                const version = this.versions.find(v => v.id === id);
-                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
-                    this.createCheckpoint();
-                    this.files = JSON.parse(JSON.stringify(version.files));
-                    this.saveToStorage();
-                    this.renderFileTree();
-                    if (this.currentFile && this.files[this.currentFile]) {
-                        this.openFile(this.currentFile);
-                    }
-                    this.showToast('Version restored!');
-                }
-            },
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg" style="color: #94a3b8;" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" style="color: #e2e8f0;">
+                    <i class="fab fa-github"></i>
+                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Sync</span>
+                </button>
+            </div>
+        </header>
 
-            renderVersions() {
-                const container = document.getElementById('version-list');
-                container.innerHTML = '';
-                
-                this.versions.forEach((version, index) => {
-                    const div = document.createElement('div');
-                    div.className = 'version-item';
-                    div.onclick = () => this.restoreVersion(version.id);
-                    div.innerHTML = `
-                        <div class="flex flex-col items-center">
-                            <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
-                            ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="text-xs font-medium text-gray-300 truncate">${version.message}</div>
-                            <div class="text-[10px] text-gray-500">${new Date(version.timestamp).toLocaleString()}</div>
-                        </div>
-                    `;
-                    container.appendChild(div);
-                });
-            },
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="flex items-center justify-between p-2 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Explorer</span>
+                    <div class="flex gap-1">
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New File">
+                            <i class="fas fa-file-medical text-xs"></i>
+                        </button>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="file-tree">
+                    <!-- Files rendered here -->
+                </div>
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                </div>
+                <div id="version-list">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
 
-            updatePreview() {
-                if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
-                const html = this.files[this.currentFile]?.content || '';
-                const blob = new Blob([html], { type: 'text/html' });
-                const url = URL.createObjectURL(blob);
-                document.getElementById('preview-frame').src = url;
-            },
+        <!-- Editor Section -->
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="text-center">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
 
-            refreshPreview() {
-                this.updatePreview();
-            },
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-semibold" style="color: #e2e8f0;">AI Assistant</span>
+                        <span id="ai-status" class="text-xs bg-slate-700 px-1.5 rounded" style="color: #94a3b8;">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">
+                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary">
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Explain</button>
+                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-            openPreviewInNewTab() {
-                if (this.currentFile && this.isPreviewable(this.currentFile)) {
-                    const html = this.files[this.currentFile].content;
-                    const blob = new Blob([html], { type: 'text/html' });
-                    const url = URL.createObjectURL(blob);
-                    window.open(url, '_blank');
-                }
-            },
+        <!-- Preview Section -->
+        <section class="preview-section">
+            <div class="preview-header">
+                <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="preview-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
+    </div>
 
-            async sendMessage() {
-                const input = document.getElementById('chat-input');
-                const message = input.value.trim();
-                if (!message) return;
-                
-                this.addChatMessage(message, 'user');
-                input.value = '';
-                
-                document.getElementById('ai-status').textContent = 'Thinking...';
-                
-                try {
-                    const response = await this.callAI(message);
-                    this.addChatMessage(response, 'ai');
-                    if (response.includes('```')) {
-                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button> to update the file.', 'ai');
-                    }
-                } catch (error) {
-                    this.addChatMessage('Error: ' + error.message, 'ai');
-                } finally {
-                    document.getElementById('ai-status').textContent = 'Ready';
-                }
-            },
+    <!-- Modals -->
+    
+    <!-- GitHub Modal -->
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" style="color: #f8fafc;">
+                <i class="fab fa-github"></i> Connect to GitHub
+            </h2>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p class="text-xs mt-1" style="color: #64748b;">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-            async callAI(message) {
-                const { provider, apiKey, model, endpoint } = this.ai;
-                const config = this.providers[provider];
-                
-                if (!apiKey && provider !== 'local') {
-                    throw new Error(`Please configure your ${config.name} API key in Settings first.`);
-                }
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4" style="color: #f8fafc;">Settings</h2>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">AI Provider</label>
+                <select id="ai-provider" class="input" onchange="app.updateAISettings()">
+                    <option value="openai">OpenAI (GPT-4)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="deepseek">Deepseek (V3/R1)</option>
+                    <option value="local">Local/Custom</option>
+                </select>
+                <p class="text-xs mt-1" style="color: #64748b;" id="provider-help">Get your key from platform.openai.com</p>
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">API Key</label>
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Model</label>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc.">
+                <p class="text-xs mt-1" style="color: #64748b;">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
+            </div>
+            
+            <div id="local-endpoint-container" class="mb-4 hidden">
+                <label class="text-sm" style="color: #94a3b8;">Custom Endpoint</label>
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Editor Theme</label>
+                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
+                    <option value="vs-dark">Dark</option>
+                    <option value="vs">Light</option>
+                    <option value="hc-black">High Contrast</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.exportProject()" class="btn btn-secondary flex-1">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button onclick="app.clearAllData()" class="btn btn-secondary flex-1" style="color: #f87171;">
+                    <i class="fas fa-trash mr-2"></i>Clear Data
+                </button>
+            </div>
+            
+            <button onclick="app.closeModal('settings-modal')" class="btn btn-secondary w-full mt-4">Close</button>
+        </div>
+    </div>
 
-                const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
-                const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\n${currentCode}\n\nUser request: ${message}`;
-                
-                let url, body, headers;
+    <!-- New File Modal -->
+    <div id="new-file-modal" class="modal hidden">
+        <div class="modal-box" style="max-width: 320px;">
+            <h3 class="text-lg font-semibold mb-3" style="color: #f8fafc;">Create New File</h3>
+            <input type="text" id="new-file-name" class="input mb-4" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <div class="flex gap-2">
+                <button onclick="app.confirmCreateFile()" class="btn btn-primary flex-1">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
 
-                if (provider === 'openai' || provider === 'deepseek') {
-                    url = config.baseUrl;
-                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ model: model || config.model, messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }], temperature: 0.7, max_tokens: 4096 });
-                } else if (provider === 'anthropic') {
-                    url = config.baseUrl;
-                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-                    body = JSON.stringify({ model: model || config.model, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
-                } else if (provider === 'google') {
-                    const modelName = model || config.model;
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
-                    headers = { 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
-                } else {
-                    url = endpoint;
-                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
-                }
+    <script>
+        const app = {
+            editor: null,
+            currentFile: null,
+            files: {},
+            versions: [],
+            github: { token: null, repo: null, connected: false },
+            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
+            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
+            chatCollapsed: false,
+            
+            providers: {
+                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', badge: 'badge-openai', help: 'Get your key from platform.openai.com' },
+                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', badge: 'badge-anthropic', help: 'Get your key from console.anthropic.com' },
+                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', badge: 'badge-google', help: 'Get your key from makersuite.google.com' },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', badge: 'badge-deepseek', help: 'Get your key from platform.deepseek.com' },
+                local: { name: 'Local', baseUrl: '', model: 'local-model', badge: 'badge-local', help: 'Enter your local endpoint URL' }
+            },
 
-                const response = await fetch(url, { method: 'POST', headers, body });
-                if (!response.ok) throw new Error('API request failed');
-                
-                const data = await response.json();
-                if (provider === 'anthropic') return data.content[0].text;
-                if (provider === 'google') return data.candidates[0].content.parts[0].text;
-                return data.choices[0].message.content;
-            },
+            init() {
+                this.loadFromStorage();
+                this.initMonaco();
+                this.renderFileTree();
+                this.renderVersions();
+                this.setupAutoSave();
+                this.updateProviderUI();
+                
+                document.getElementById('ai-provider').value = this.ai.provider;
+                document.getElementById('ai-api-key').value = this.ai.apiKey;
+                document.getElementById('ai-model').value = this.ai.model;
+                document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                if (this.github.connected) {
+                    document.getElementById('github-status').textContent = this.github.repo;
+                }
+            },
 
-            addChatMessage(text, sender) {
-                const container = document.getElementById('chat-messages');
-                const div = document.createElement('div');
-                div.className = `chat-bubble ${sender}`;
-                div.innerHTML = text;
-                container.appendChild(div);
-                container.scrollTop = container.scrollHeight;
-            },
+            initMonaco() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                
+                require(['vs/editor/editor.main'], () => {
+                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+                        value: '',
+                        language: 'javascript',
+                        theme: this.settings.theme,
+                        fontSize: this.settings.fontSize,
+                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
+                        automaticLayout: true,
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        fixedOverflowWidgets: true
+                    });
 
-            quickAction(action) {
-                const actions = { explain: 'Explain this code', fix: 'Fix bugs in this code', optimize: 'Optimize this code', document: 'Add documentation to this code' };
-                document.getElementById('chat-input').value = actions[action];
-                this.sendMessage();
-            },
+                    let timeout;
+                    this.editor.onDidChangeModelContent(() => {
+                        if (this.currentFile) {
+                            clearTimeout(timeout);
+                            timeout = setTimeout(() => {
+                                this.files[this.currentFile].content = this.editor.getValue();
+                                this.saveToStorage();
+                                if (this.isPreviewable(this.currentFile)) {
+                                    this.updatePreview();
+                                }
+                            }, 1000);
+                        }
+                    });
+                });
+            },
 
-            applyAIChanges() {
-                const messages = document.getElementById('chat-messages').children;
-                const lastMessage = messages[messages.length - 2];
-                const text = lastMessage.textContent;
-                const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
-                if (codeBlock && this.currentFile) {
-                    this.files[this.currentFile].content = codeBlock[1].trim();
-                    this.openFile(this.currentFile);
-                    this.showToast('Changes applied!');
-                }
-            },
+            updateProviderUI() {
+                const p = this.providers[this.ai.provider];
+                const badge = document.getElementById('active-provider');
+                if (badge) {
+                    badge.className = `provider-badge ${p.badge}`;
+                    badge.textContent = p.name;
+                    badge.classList.remove('hidden');
+                }
+                const help = document.getElementById('provider-help');
+                if (help) help.textContent = p.help;
+            },
 
-            toggleChat() {
-                const panel = document.getElementById('chat-panel');
-                const icon = document.getElementById('chat-toggle-icon');
-                this.chatCollapsed = !this.chatCollapsed;
-                
-                if (this.chatCollapsed) {
-                    panel.style.height = '32px';
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
-                } else {
-                    panel.style.height = '220px';
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
-                }
-            },
+            createFile() {
+                document.getElementById('new-file-modal').classList.remove('hidden');
+                document.getElementById('new-file-name').focus();
+            },
 
-            showGitHubModal() {
-                document.getElementById('github-modal').classList.remove('hidden');
-                if (this.github.token) {
-                    document.getElementById('github-token').value = this.github.token;
-                    document.getElementById('github-repo').value = this.github.repo || '';
-                }
-            },
+            confirmCreateFile() {
+                const name = document.getElementById('new-file-name').value.trim();
+                if (name && !this.files[name]) {
+                    this.files[name] = { content: '', type: 'file' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.openFile(name);
+                    this.closeModal('new-file-modal');
+                    document.getElementById('new-file-name').value = '';
+                }
+            },
 
-            async connectGitHub() {
-                const token = document.getElementById('github-token').value.trim();
-                const repo = document.getElementById('github-repo').value.trim();
-                
-                if (!token || !repo) {
-                    alert('Please provide both token and repository');
-                    return;
-                }
-                
-                try {
-                    const response = await fetch('https://api.github.com/user', {
-                        headers: { 'Authorization': `token ${token}` }
-                    });
-                    
-                    if (response.ok) {
-                        this.github = { token, repo, connected: true };
-                        this.saveToStorage();
-                        document.getElementById('github-status').textContent = repo;
-                        this.closeModal('github-modal');
-                        this.showToast('Connected to GitHub!');
-                        this.loadGitHubRepo();
-                    } else {
-                        alert('Invalid token');
-                    }
-                } catch (error) {
-                    alert('Error: ' + error.message);
-                }
-            },
+            createFolder() {
+                const name = prompt('Folder name:');
+                if (name) {
+                    this.files[name + '/'] = { content: null, type: 'folder' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                }
+            },
 
-            async loadGitHubRepo() {
-                if (!this.github.connected) return;
-                try {
-                    const [owner, repo] = this.github.repo.split('/');
-                    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
-                        headers: { 'Authorization': `token ${this.github.token}` }
-                    });
-                    
-                    const data = await response.json();
-                    this.files = {};
-                    
-                    for (const item of data) {
-                        if (item.type === 'file') {
-                            const contentResponse = await fetch(item.download_url);
-                            const content = await contentResponse.text();
-                            this.files[item.name] = { content, type: 'file' };
-                        }
-                    }
-                    
-                    this.saveToStorage();
-                    this.renderFileTree();
-                    this.showToast('Repository loaded!');
-                    
-                    const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
-                    if (firstHtml) this.openFile(firstHtml);
-                    else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
-                    
-                } catch (error) {
-                    this.showToast('Error loading repository');
-                }
-            },
+            openFile(filename) {
+                if (this.files[filename]?.type === 'folder') return;
+                
+                this.currentFile = filename;
+                document.getElementById('empty-state').classList.add('hidden');
+                
+                if (this.editor) {
+                    const model = monaco.editor.createModel(
+                        this.files[filename]?.content || '',
+                        this.getLanguage(filename)
+                    );
+                    this.editor.setModel(model);
+                }
+                
+                this.renderTabs();
+                this.renderFileTree();
+                
+                if (this.isPreviewable(filename)) {
+                    this.updatePreview();
+                }
+            },
 
-            async deployToGitHub() {
-                if (!this.github.connected) {
-                    this.showGitHubModal();
-                    return;
-                }
-                
-                const [owner, repo] = this.github.repo.split('/');
-                let successCount = 0;
-                
-                for (const [filename, fileData] of Object.entries(this.files)) {
-                    if (fileData.type === 'folder') continue;
-                    
-                    try {
-                        const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
-                            headers: { 'Authorization': `token ${this.github.token}` }
-                        });
-                        
-                        let sha = null;
-                        if (getResponse.ok) {
-                            const data = await getResponse.json();
-                            sha = data.sha;
-                        }
-                        
-                        const content = btoa(unescape(encodeURIComponent(fileData.content)));
-                        const body = {
-                            message: `Update ${filename} via DevStudio`,
-                            content: content,
-                            ...(sha && { sha })
-                        };
-                        
-                        const putResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
-                            method: 'PUT',
-                            headers: { 'Authorization': `token ${this.github.token}`, 'Content-Type': 'application/json' },
-                            body: JSON.stringify(body)
-                        });
-                        
-                        if (putResponse.ok) successCount++;
-                    } catch (error) {
-                        console.error(`Error saving ${filename}:`, error);
-                    }
-                }
-                
-                this.showToast(`Synced ${successCount} files to GitHub!`);
-            },
+            closeFile(filename) {
+                delete this.files[filename];
+                if (this.currentFile === filename) {
+                    const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
+                    this.currentFile = remaining[0] || null;
+                    if (this.currentFile) {
+                        this.openFile(this.currentFile);
+                    } else {
+                        if (this.editor) this.editor.setValue('');
+                        document.getElementById('empty-state').classList.remove('hidden');
+                    }
+                }
+                this.saveToStorage();
+                this.renderTabs();
+                this.renderFileTree();
+            },
 
-            toggleSettings() {
-                document.getElementById('settings-modal').classList.remove('hidden');
-            },
+            getLanguage(filename) {
+                const ext = filename.split('.').pop();
+                const map = { 'js': 'javascript', 'ts': 'typescript', 'html': 'html', 'css': 'css', 'json': 'json', 'py': 'python', 'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript' };
+                return map[ext] || 'plaintext';
+            },
 
-            updateAISettings() {
-                const provider = document.getElementById('ai-provider').value;
-                document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
-                
-                const modelInput = document.getElementById('ai-model');
-                if (!modelInput.value) {
-                    modelInput.value = this.providers[provider].model;
-                }
-                
-                this.ai = {
-                    provider,
-                    apiKey: document.getElementById('ai-api-key').value,
-                    model: modelInput.value,
-                    endpoint: document.getElementById('ai-endpoint').value
-                };
-                
-                this.updateProviderUI();
-                this.saveToStorage();
-            },
+            isPreviewable(filename) {
+                return filename.endsWith('.html') || filename.endsWith('.htm');
+            },
 
-            updateEditorTheme() {
-                const theme = document.getElementById('editor-theme').value;
-                this.settings.theme = theme;
-                monaco.editor.setTheme(theme);
-                this.saveToStorage();
-            },
+            renderFileTree() {
+                const container = document.getElementById('file-tree');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).sort().forEach(filename => {
+                    const div = document.createElement('div');
+                    const isActive = this.currentFile === filename;
+                    div.className = `file-item ${isActive ? 'active' : ''}`;
+                    
+                    const isFolder = this.files[filename].type === 'folder';
+                    const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
+                    
+                    div.innerHTML = `
+                        <i class="fas ${icon} w-4 text-center text-xs"></i>
+                        <span class="flex-1 truncate">${filename}</span>
+                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 p-1" style="color: inherit;"><i class="fas fa-times text-xs"></i></button>` : ''}
+                    `;
+                    
+                    div.onclick = () => this.openFile(filename);
+                    div.classList.add('group');
+                    container.appendChild(div);
+                });
+            },
 
-            saveToStorage() {
-                const data = { files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings };
-                localStorage.setItem('devstudio_data', JSON.stringify(data));
-            },
+            getFileIcon(filename) {
+                if (filename.endsWith('.js')) return 'fa-js text-yellow-400';
+                if (filename.endsWith('.html')) return 'fa-html5 text-orange-500';
+                if (filename.endsWith('.css')) return 'fa-css3 text-blue-400';
+                if (filename.endsWith('.json')) return 'fa-cog text-gray-400';
+                return 'fa-file-code text-gray-400';
+            },
 
-            loadFromStorage() {
-                const data = localStorage.getItem('devstudio_data');
-                if (data) {
-                    const parsed = JSON.parse(data);
-                    this.files = parsed.files || {};
-                    this.versions = parsed.versions || [];
-                    this.github = parsed.github || { token: null, repo: null, connected: false };
-                    this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' };
-                    this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
-                } else {
-                    this.files = {
-                        'index.html': { content: `<!DOCTYPE html>
+            renderTabs() {
+                const container = document.getElementById('tabs-container');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
+                    const tab = document.createElement('div');
+                    tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
+                    tab.innerHTML = `
+                        <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
+                        <span class="truncate max-w-[100px]">${filename}</span>
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="ml-1" style="color: inherit;"><i class="fas fa-times text-xs"></i></button>
+                    `;
+                    tab.onclick = () => this.openFile(filename);
+                    container.appendChild(tab);
+                });
+            },
+
+            createCheckpoint() {
+                const checkpoint = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    message: `Checkpoint ${this.versions.length + 1}`,
+                    files: JSON.parse(JSON.stringify(this.files))
+                };
+                
+                this.versions.unshift(checkpoint);
+                if (this.versions.length > 20) this.versions.pop();
+                
+                this.saveToStorage();
+                this.renderVersions();
+                this.showToast('Checkpoint saved!');
+            },
+
+            restoreVersion(id) {
+                const version = this.versions.find(v => v.id === id);
+                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
+                    this.createCheckpoint();
+                    this.files = JSON.parse(JSON.stringify(version.files));
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    if (this.currentFile && this.files[this.currentFile]) {
+                        this.openFile(this.currentFile);
+                    }
+                    this.showToast('Version restored!');
+                }
+            },
+
+            renderVersions() {
+                const container = document.getElementById('version-list');
+                container.innerHTML = '';
+                
+                this.versions.forEach((version, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'version-item';
+                    div.onclick = () => this.restoreVersion(version.id);
+                    div.innerHTML = `
+                        <div class="flex flex-col items-center">
+                            <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
+                            ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-semibold truncate" style="color: #e2e8f0;">${version.message}</div>
+                            <div class="text-xs" style="color: #64748b;">${new Date(version.timestamp).toLocaleString()}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            },
+
+            updatePreview() {
+                if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
+                const html = this.files[this.currentFile]?.content || '';
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                document.getElementById('preview-frame').src = url;
+            },
+
+            refreshPreview() {
+                this.updatePreview();
+            },
+
+            openPreviewInNewTab() {
+                if (this.currentFile && this.isPreviewable(this.currentFile)) {
+                    const html = this.files[this.currentFile].content;
+                    const blob = new Blob([html], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                }
+            },
+
+            async sendMessage() {
+                const input = document.getElementById('chat-input');
+                const message = input.value.trim();
+                if (!message) return;
+                
+                this.addChatMessage(message, 'user');
+                input.value = '';
+                
+                document.getElementById('ai-status').textContent = 'Thinking...';
+                
+                try {
+                    const response = await this.callAI(message);
+                    this.addChatMessage(response, 'ai');
+                    if (response.includes('```')) {
+                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button> to update the file.', 'ai');
+                    }
+                } catch (error) {
+                    this.addChatMessage('Error: ' + error.message, 'ai');
+                } finally {
+                    document.getElementById('ai-status').textContent = 'Ready';
+                }
+            },
+
+            async callAI(message) {
+                const { provider, apiKey, model, endpoint } = this.ai;
+                const config = this.providers[provider];
+                
+                if (!apiKey && provider !== 'local') {
+                    throw new Error(`Please configure your ${config.name} API key in Settings first.`);
+                }
+
+                const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
+                const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\        }
+        
+        /* Editor Section */
+        .editor-section {
+            grid-area: editor;
+            display: flex;
+            flex-direction: column;
+            background-color: #0f172a;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .tabs-bar {
+            height: 36px;
+            background-color: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        .tab {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #334155;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            background-color: #1e293b;
+            color: #94a3b8;
+        }
+        
+        .tab.active {
+            background-color: #334155;
+            color: #f8fafc;
+            border-top: 2px solid #3b82f6;
+        }
+        
+        .editor-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            min-height: 0;
+            background-color: #0f172a;
+        }
+        
+        #monaco-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #0f172a;
+        }
+        
+        .chat-panel {
+            height: 220px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-header {
+            height: 32px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            background-color: #252f47;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            background-color: #1e293b;
+        }
+        
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            grid-area: preview;
+            background-color: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .preview-header {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            background-color: #1e293b;
+        }
+        
+        .preview-content {
+            flex: 1;
+            position: relative;
+            background-color: white;
+            overflow: hidden;
+        }
+        
+        #preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background-color: white;
+        }
+        
+        /* Chat Bubbles */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        
+        .chat-bubble.user {
+            background-color: #3b82f6;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .chat-bubble.ai {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        /* File Tree */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-bottom: 2px;
+            color: #cbd5e1;
+            background-color: transparent;
+        }
+        
+        .file-item:hover {
+            background-color: #334155;
+        }
+        
+        .file-item.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        /* Version Items */
+        .version-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background-color: transparent;
+        }
+        
+        .version-item:hover {
+            background-color: #334155;
+        }
+        
+        .version-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #64748b;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        
+        .version-dot.active {
+            background-color: #10b981;
+        }
+        
+        .version-line {
+            width: 2px;
+            background-color: #475569;
+            margin-left: 4px;
+            flex-grow: 1;
+            min-height: 20px;
+        }
+        
+        /* Modals */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 20px;
+        }
+        
+        .modal.hidden { 
+            display: none !important; 
+        }
+        
+        .modal-box {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 24px;
+            color: #e2e8f0;
+        }
+        
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        
+        .btn-secondary {
+            background-color: #334155;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #475569;
+        }
+        
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: 8px 12px;
+            background-color: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        /* Utility */
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; }
+        .text-sm { font-size: 14px; }
+        .font-semibold { font-weight: 600; }
+        .text-gray-400 { color: #94a3b8; }
+        .text-gray-500 { color: #64748b; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-2 { padding: 8px; }
+        .rounded { border-radius: 6px; }
+        
+        /* Provider Badge */
+        .provider-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-openai { background-color: #10a37f; color: white; }
+        .badge-anthropic { background-color: #d4a574; color: #1a1a1a; }
+        .badge-google { background-color: #4285f4; color: white; }
+        .badge-deepseek { background-color: #4f46e5; color: white; }
+        .badge-local { background-color: #64748b; color: white; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background-color: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background-color: #64748b; }
+        
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            background-color: #0f172a;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+            color: #e2e8f0;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        /* Ensure text is visible */
+        h1, h2, h3, p, span, div {
+            color: inherit;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="app-grid">
+        <!-- Header -->
+        <header class="header">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-code text-white text-sm"></i>
+                </div>
+                <h1 class="font-semibold text-lg" style="color: #f8fafc;">DevStudio</h1>
+                <span class="text-xs bg-slate-700 px-2 py-1 rounded" style="color: #94a3b8;">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg" style="color: #94a3b8;" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm" style="color: #e2e8f0;">
+                    <i class="fab fa-github"></i>
+                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <span>Sync</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="flex items-center justify-between p-2 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Explorer</span>
+                    <div class="flex gap-1">
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New File">
+                            <i class="fas fa-file-medical text-xs"></i>
+                        </button>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="file-tree">
+                    <!-- Files rendered here -->
+                </div>
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
+                    <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
+                </div>
+                <div id="version-list">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor Section -->
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="text-center">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-semibold" style="color: #e2e8f0;">AI Assistant</span>
+                        <span id="ai-status" class="text-xs bg-slate-700 px-1.5 rounded" style="color: #94a3b8;">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">
+                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary">
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Explain</button>
+                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded" style="color: #e2e8f0;">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Preview Section -->
+        <section class="preview-section">
+            <div class="preview-header">
+                <span class="text-xs font-semibold uppercase tracking-wider" style="color: #94a3b8;">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded" style="color: #94a3b8;" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="preview-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modals -->
+    
+    <!-- GitHub Modal -->
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4 flex items-center gap-2" style="color: #f8fafc;">
+                <i class="fab fa-github"></i> Connect to GitHub
+            </h2>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p class="text-xs mt-1" style="color: #64748b;">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 class="text-xl font-semibold mb-4" style="color: #f8fafc;">Settings</h2>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">AI Provider</label>
+                <select id="ai-provider" class="input" onchange="app.updateAISettings()">
+                    <option value="openai">OpenAI (GPT-4)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="deepseek">Deepseek (V3/R1)</option>
+                    <option value="local">Local/Custom</option>
+                </select>
+                <p class="text-xs mt-1" style="color: #64748b;" id="provider-help">Get your key from platform.openai.com</p>
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">API Key</label>
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Model</label>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc.">
+                <p class="text-xs mt-1" style="color: #64748b;">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
+            </div>
+            
+            <div id="local-endpoint-container" class="mb-4 hidden">
+                <label class="text-sm" style="color: #94a3b8;">Custom Endpoint</label>
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm" style="color: #94a3b8;">Editor Theme</label>
+                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
+                    <option value="vs-dark">Dark</option>
+                    <option value="vs">Light</option>
+                    <option value="hc-black">High Contrast</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.exportProject()" class="btn btn-secondary flex-1">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button onclick="app.clearAllData()" class="btn btn-secondary flex-1" style="color: #f87171;">
+                    <i class="fas fa-trash mr-2"></i>Clear Data
+                </button>
+            </div>
+            
+            <button onclick="app.closeModal('settings-modal')" class="btn btn-secondary w-full mt-4">Close</button>
+        </div>
+    </div>
+
+    <!-- New File Modal -->
+    <div id="new-file-modal" class="modal hidden">
+        <div class="modal-box" style="max-width: 320px;">
+            <h3 class="text-lg font-semibold mb-3" style="color: #f8fafc;">Create New File</h3>
+            <input type="text" id="new-file-name" class="input mb-4" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <div class="flex gap-2">
+                <button onclick="app.confirmCreateFile()" class="btn btn-primary flex-1">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary flex-1">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            editor: null,
+            currentFile: null,
+            files: {},
+            versions: [],
+            github: { token: null, repo: null, connected: false },
+            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
+            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
+            chatCollapsed: false,
+            
+            providers: {
+                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', badge: 'badge-openai', help: 'Get your key from platform.openai.com' },
+                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', badge: 'badge-anthropic', help: 'Get your key from console.anthropic.com' },
+                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', badge: 'badge-google', help: 'Get your key from makersuite.google.com' },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', badge: 'badge-deepseek', help: 'Get your key from platform.deepseek.com' },
+                local: { name: 'Local', baseUrl: '', model: 'local-model', badge: 'badge-local', help: 'Enter your local endpoint URL' }
+            },
+
+            init() {
+                this.loadFromStorage();
+                this.initMonaco();
+                this.renderFileTree();
+                this.renderVersions();
+                this.setupAutoSave();
+                this.updateProviderUI();
+                
+                document.getElementById('ai-provider').value = this.ai.provider;
+                document.getElementById('ai-api-key').value = this.ai.apiKey;
+                document.getElementById('ai-model').value = this.ai.model;
+                document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                if (this.github.connected) {
+                    document.getElementById('github-status').textContent = this.github.repo;
+                }
+            },
+
+            initMonaco() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                
+                require(['vs/editor/editor.main'], () => {
+                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+                        value: '',
+                        language: 'javascript',
+                        theme: this.settings.theme,
+                        fontSize: this.settings.fontSize,
+                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
+                        automaticLayout: true,
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        fixedOverflowWidgets: true
+                    });
+
+                    let timeout;
+                    this.editor.onDidChangeModelContent(() => {
+                        if (this.currentFile) {
+                            clearTimeout(timeout);
+                            timeout = setTimeout(() => {
+                                this.files[this.currentFile].content = this.editor.getValue();
+                                this.saveToStorage();
+                                if (this.isPreviewable(this.currentFile)) {
+                                    this.updatePreview();
+                                }
+                            }, 1000);
+                        }
+                    });
+                });
+            },
+
+            updateProviderUI() {
+                const p = this.providers[this.ai.provider];
+                const badge = document.getElementById('active-provider');
+                if (badge) {
+                    badge.className = `provider-badge ${p.badge}`;
+                    badge.textContent = p.name;
+                    badge.classList.remove('hidden');
+                }
+                const help = document.getElementById('provider-help');
+                if (help) help.textContent = p.help;
+            },
+
+            createFile() {
+                document.getElementById('new-file-modal').classList.remove('hidden');
+                document.getElementById('new-file-name').focus();
+            },
+
+            confirmCreateFile() {
+                const name = document.getElementById('new-file-name').value.trim();
+                if (name && !this.files[name]) {
+                    this.files[name] = { content: '', type: 'file' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.openFile(name);
+                    this.closeModal('new-file-modal');
+                    document.getElementById('new-file-name').value = '';
+                }
+            },
+
+            createFolder() {
+                const name = prompt('Folder name:');
+                if (name) {
+                    this.files[name + '/'] = { content: null, type: 'folder' };
+                    this.saveToStorage();
+                    this.renderFileTree();
+                }
+            },
+
+            openFile(filename) {
+                if (this.files[filename]?.type === 'folder') return;
+                
+                this.currentFile = filename;
+                document.getElementById('empty-state').classList.add('hidden');
+                
+                if (this.editor) {
+                    const model = monaco.editor.createModel(
+                        this.files[filename]?.content || '',
+                        this.getLanguage(filename)
+                    );
+                    this.editor.setModel(model);
+                }
+                
+                this.renderTabs();
+                this.renderFileTree();
+                
+                if (this.isPreviewable(filename)) {
+                    this.updatePreview();
+                }
+            },
+
+            closeFile(filename) {
+                delete this.files[filename];
+                if (this.currentFile === filename) {
+                    const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
+                    this.currentFile = remaining[0] || null;
+                    if (this.currentFile) {
+                        this.openFile(this.currentFile);
+                    } else {
+                        if (this.editor) this.editor.setValue('');
+                        document.getElementById('empty-state').classList.remove('hidden');
+                    }
+                }
+                this.saveToStorage();
+                this.renderTabs();
+                this.renderFileTree();
+            },
+
+            getLanguage(filename) {
+                const ext = filename.split('.').pop();
+                const map = { 'js': 'javascript', 'ts': 'typescript', 'html': 'html', 'css': 'css', 'json': 'json', 'py': 'python', 'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript' };
+                return map[ext] || 'plaintext';
+            },
+
+            isPreviewable(filename) {
+                return filename.endsWith('.html') || filename.endsWith('.htm');
+            },
+
+            renderFileTree() {
+                const container = document.getElementById('file-tree');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).sort().forEach(filename => {
+                    const div = document.createElement('div');
+                    const isActive = this.currentFile === filename;
+                    div.className = `file-item ${isActive ? 'active' : ''}`;
+                    
+                    const isFolder = this.files[filename].type === 'folder';
+                    const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
+                    
+                    div.innerHTML = `
+                        <i class="fas ${icon} w-4 text-center text-xs"></i>
+                        <span class="flex-1 truncate">${filename}</span>
+                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="opacity-0 group-hover:opacity-100 p-1" style="color: inherit;"><i class="fas fa-times text-xs"></i></button>` : ''}
+                    `;
+                    
+                    div.onclick = () => this.openFile(filename);
+                    div.classList.add('group');
+                    container.appendChild(div);
+                });
+            },
+
+            getFileIcon(filename) {
+                if (filename.endsWith('.js')) return 'fa-js text-yellow-400';
+                if (filename.endsWith('.html')) return 'fa-html5 text-orange-500';
+                if (filename.endsWith('.css')) return 'fa-css3 text-blue-400';
+                if (filename.endsWith('.json')) return 'fa-cog text-gray-400';
+                return 'fa-file-code text-gray-400';
+            },
+
+            renderTabs() {
+                const container = document.getElementById('tabs-container');
+                container.innerHTML = '';
+                
+                Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
+                    const tab = document.createElement('div');
+                    tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
+                    tab.innerHTML = `
+                        <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
+                        <span class="truncate max-w-[100px]">${filename}</span>
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="ml-1" style="color: inherit;"><i class="fas fa-times text-xs"></i></button>
+                    `;
+                    tab.onclick = () => this.openFile(filename);
+                    container.appendChild(tab);
+                });
+            },
+
+            createCheckpoint() {
+                const checkpoint = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    message: `Checkpoint ${this.versions.length + 1}`,
+                    files: JSON.parse(JSON.stringify(this.files))
+                };
+                
+                this.versions.unshift(checkpoint);
+                if (this.versions.length > 20) this.versions.pop();
+                
+                this.saveToStorage();
+                this.renderVersions();
+                this.showToast('Checkpoint saved!');
+            },
+
+            restoreVersion(id) {
+                const version = this.versions.find(v => v.id === id);
+                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
+                    this.createCheckpoint();
+                    this.files = JSON.parse(JSON.stringify(version.files));
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    if (this.currentFile && this.files[this.currentFile]) {
+                        this.openFile(this.currentFile);
+                    }
+                    this.showToast('Version restored!');
+                }
+            },
+
+            renderVersions() {
+                const container = document.getElementById('version-list');
+                container.innerHTML = '';
+                
+                this.versions.forEach((version, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'version-item';
+                    div.onclick = () => this.restoreVersion(version.id);
+                    div.innerHTML = `
+                        <div class="flex flex-col items-center">
+                            <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
+                            ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-semibold truncate" style="color: #e2e8f0;">${version.message}</div>
+                            <div class="text-xs" style="color: #64748b;">${new Date(version.timestamp).toLocaleString()}</div>
+                        </div>
+                    `;
+                    container.appendChild(div);
+                });
+            },
+
+            updatePreview() {
+                if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
+                const html = this.files[this.currentFile]?.content || '';
+                const blob = new Blob([html], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                document.getElementById('preview-frame').src = url;
+            },
+
+            refreshPreview() {
+                this.updatePreview();
+            },
+
+            openPreviewInNewTab() {
+                if (this.currentFile && this.isPreviewable(this.currentFile)) {
+                    const html = this.files[this.currentFile].content;
+                    const blob = new Blob([html], { type: 'text/html' });
+                    const url = URL.createObjectURL(blob);
+                    window.open(url, '_blank');
+                }
+            },
+
+            async sendMessage() {
+                const input = document.getElementById('chat-input');
+                const message = input.value.trim();
+                if (!message) return;
+                
+                this.addChatMessage(message, 'user');
+                input.value = '';
+                
+                document.getElementById('ai-status').textContent = 'Thinking...';
+                
+                try {
+                    const response = await this.callAI(message);
+                    this.addChatMessage(response, 'ai');
+                    if (response.includes('```')) {
+                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button> to update the file.', 'ai');
+                    }
+                } catch (error) {
+                    this.addChatMessage('Error: ' + error.message, 'ai');
+                } finally {
+                    document.getElementById('ai-status').textContent = 'Ready';
+                }
+            },
+
+            async callAI(message) {
+                const { provider, apiKey, model, endpoint } = this.ai;
+                const config = this.providers[provider];
+                
+                if (!apiKey && provider !== 'local') {
+                    throw new Error(`Please configure your ${config.name} API key in Settings first.`);
+                }
+
+                const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
+                const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\n${currentCode}\n\nUser request: ${message}`;
+                
+                let url, body, headers;
+
+                if (provider === 'openai' || provider === 'deepseek') {
+                    url = config.baseUrl;
+                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ model: model || config.model, messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }], temperature: 0.7, max_tokens: 4096 });
+                } else if (provider === 'anthropic') {
+                    url = config.baseUrl;
+                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+                    body = JSON.stringify({ model: model || config.model, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
+                } else if (provider === 'google') {
+                    const modelName = model || config.model;
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+                    headers = { 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
+                } else {
+                    url = endpoint;
+                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
+                }
+
+                const response = await fetch(url, { method: 'POST', headers, body });
+                if (!response.ok) throw new Error('API request failed');
+                
+                const data = await response.json();
+                if (provider === 'anthropic') return data.content[0].text;
+                if (provider === 'google') return data.candidates[0].content.parts[0].text;
+                return data.choices[0].message.content;
+            },
+
+            addChatMessage(text, sender) {
+                const container = document.getElementById('chat-messages');
+                const div = document.createElement('div');
+                div.className = `chat-bubble ${sender}`;
+                div.innerHTML = text;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            },
+
+            quickAction(action) {
+                const actions = { explain: 'Explain this code', fix: 'Fix bugs in this code', optimize: 'Optimize this code', document: 'Add documentation to this code' };
+                document.getElementById('chat-input').value = actions[action];
+                this.sendMessage();
+            },
+
+            applyAIChanges() {
+                const messages = document.getElementById('chat-messages').children;
+                const lastMessage = messages[messages.length - 2];
+                const text = lastMessage.textContent;
+                const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
+                if (codeBlock && this.currentFile) {
+                    this.files[this.currentFile].content = codeBlock[1].trim();
+                    this.openFile(this.currentFile);
+                    this.showToast('Changes applied!');
+                }
+            },
+
+            toggleChat() {
+                const panel = document.getElementById('chat-panel');
+                const icon = document.getElementById('chat-toggle-icon');
+                this.chatCollapsed = !this.chatCollapsed;
+                
+                if (this.chatCollapsed) {
+                    panel.style.height = '32px';
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    panel.style.height = '220px';
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
+                }
+            },
+
+            showGitHubModal() {
+                document.getElementById('github-modal').classList.remove('hidden');
+                if (this.github.token) {
+                    document.getElementById('github-token').value = this.github.token;
+                    document.getElementById('github-repo').value = this.github.repo || '';
+                }
+            },
+
+            async connectGitHub() {
+                const token = document.getElementById('github-token').value.trim();
+                const repo = document.getElementById('github-repo').value.trim();
+                
+                if (!token || !repo) {
+                    alert('Please provide both token and repository');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('https://api.github.com/user', {
+                        headers: { 'Authorization': `token ${token}` }
+                    });
+                    
+                    if (response.ok) {
+                        this.github = { token, repo, connected: true };
+                        this.saveToStorage();
+                        document.getElementById('github-status').textContent = repo;
+                        this.closeModal('github-modal');
+                        this.showToast('Connected to GitHub!');
+                        this.loadGitHubRepo();
+                    } else {
+                        alert('Invalid token');
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            },
+
+            async loadGitHubRepo() {
+                if (!this.github.connected) return;
+                try {
+                    const [owner, repo] = this.github.repo.split('/');
+                    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
+                        headers: { 'Authorization': `token ${this.github.token}` }
+                    });
+                    
+                    const data = await response.json();
+                    this.files = {};
+                    
+                    for (const item of data) {
+                        if (item.type === 'file') {
+                            const contentResponse = await fetch(item.download_url);
+                            const content = await contentResponse.text();
+                            this.files[item.name] = { content, type: 'file' };
+                        }
+                    }
+                    
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    this.showToast('Repository loaded!');
+                    
+                    const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
+                    if (firstHtml) this.openFile(firstHtml);
+                    else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
+                    
+                } catch (error) {
+                    this.showToast('Error loading repository');
+                }
+            },
+
+            async deployToGitHub() {
+                if (!this.github.connected) {
+                    this.showGitHubModal();
+                    return;
+                }
+                
+                const [owner, repo] = this.github.repo.split('/');
+                let successCount = 0;
+                
+                for (const [filename, fileData] of Object.entries(this.files)) {
+                    if (fileData.type === 'folder') continue;
+                    
+                    try {
+                        const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
+                            headers: { 'Authorization': `token ${this.github.token}` }
+                        });
+                        
+                        let sha = null;
+                        if (getResponse.ok) {
+                            const data = await getResponse.json();
+                            sha = data.sha;
+                        }
+                        
+                        const content = btoa(unescape(encodeURIComponent(fileData.content)));
+                        const body = {
+                            message: `Update ${filename} via DevStudio`,
+                            content: content,
+                            ...(sha && { sha })
+                        };
+                        
+                        const putResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
+                            method: 'PUT',
+                            headers: { 'Authorization': `token ${this.github.token}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify(body)
+                        });
+                        
+                        if (putResponse.ok) successCount++;
+                    } catch (error) {
+                        console.error(`Error saving ${filename}:`, error);
+                    }
+                }
+                
+                this.showToast(`Synced ${successCount} files to GitHub!`);
+            },
+
+            toggleSettings() {
+                document.getElementById('settings-modal').classList.remove('hidden');
+            },
+
+            updateAISettings() {
+                const provider = document.getElementById('ai-provider').value;
+                document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
+                
+                const modelInput = document.getElementById('ai-model');
+                if (!modelInput.value) {
+                    modelInput.value = this.providers[provider].model;
+                }
+                
+                this.ai = {
+                    provider,
+                    apiKey: document.getElementById('ai-api-key').value,
+                    model: modelInput.value,
+                    endpoint: document.getElementById('ai-endpoint').value
+                };
+                
+                this.updateProviderUI();
+                this.saveToStorage();
+            },
+
+            updateEditorTheme() {
+                const theme = document.getElementById('editor-theme').value;
+                this.settings.theme = theme;
+                monaco.editor.setTheme(theme);
+                this.saveToStorage();
+            },
+
+            saveToStorage() {
+                const data = { files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings };
+                localStorage.setItem('devstudio_data', JSON.stringify(data));
+            },
+
+            loadFromStorage() {
+                const data = localStorage.getItem('devstudio_data');
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    this.files = parsed.files || {};
+                    this.versions = parsed.versions || [];
+                    this.github = parsed.github || { token: null, repo: null, connected: false };
+                    this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' };
+                    this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
+                } else {
+                    this.files = {
+                        'index.html': { content: `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Project</title>
-    <style>
-        body {
-            font-family: system-ui, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            min-height: 100vh;
-        }
-        h1 { font-size: 3rem; margin-bottom: 1rem; }
-        p { font-size: 1.25rem; opacity: 0.9; }
-        .card {
-            background: rgba(255,255,255,0.1);
-            padding: 2rem;
-            border-radius: 1rem;
-            margin-top: 2rem;
-            backdrop-filter: blur(10px);
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Project</title>
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        h1 { font-size: 3rem; margin-bottom: 1rem; }
+        p { font-size: 1.25rem; opacity: 0.9; }
+        .card {
+            background: rgba(255,255,255,0.1);
+            padding: 2rem;
+            border-radius: 1rem;
+            margin-top: 2rem;
+            backdrop-filter: blur(10px);
+        }
+    </style>
 </head>
 <body>
-    <h1>Welcome to DevStudio</h1>
-    <p>Edit this code to see live changes instantly!</p>
-    <div class="card">
-        <h2>Getting Started</h2>
-        <ul>
-            <li>Edit files in the left sidebar</li>
-            <li>Use the AI chat for help</li>
-            <li>Save checkpoints to track changes</li>
-            <li>Connect GitHub to sync</li>
-        </ul>
-    </div>
+    <h1>Welcome to DevStudio</h1>
+    <p>Edit this code to see live changes instantly!</p>
+    <div class="card">
+        <h2>Getting Started</h2>
+        <ul>
+            <li>Edit files in the left sidebar</li>
+            <li>Use the AI chat for help</li>
+            <li>Save checkpoints to track changes</li>
+            <li>Connect GitHub to sync</li>
+        </ul>
+    </div>
 </body>
 </html>`, type: 'file' },
-                        'style.css': { content: `/* Add your styles here */\nbody {\n    margin: 0;\n    padding: 0;\n}`, type: 'file' },
-                        'script.js': { content: `// Add your JavaScript here\nconsole.log('Hello from DevStudio!');`, type: 'file' }
-                    };
-                    this.createCheckpoint();
-                }
-            },
+                        'style.css': { content: `/* Add your styles here */\nbody {\n    margin: 0;\n    padding: 0;\n}`, type: 'file' },
+                        'script.js': { content: `// Add your JavaScript here\nconsole.log('Hello from DevStudio!');`, type: 'file' }
+                    };
+                    this.createCheckpoint();
+                }
+            },
 
-            exportProject() {
-                let content = '';
-                for (const [name, data] of Object.entries(this.files)) {
-                    if (data.type === 'file') {
-                        content += `=== ${name} ===\n${data.content}\n\n`;
-                    }
-                }
-                const blob = new Blob([content], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'project-export.txt';
-                a.click();
-                URL.revokeObjectURL(url);
-            },
+            exportProject() {
+                let content = '';
+                for (const [name, data] of Object.entries(this.files)) {
+                    if (data.type === 'file') {
+                        content += `=== ${name} ===\n${data.content}\n\n`;
+                    }
+                }
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'project-export.txt';
+                a.click();
+                URL.revokeObjectURL(url);
+            },
 
-            clearAllData() {
-                if (confirm('Are you sure? This will delete all files and history.')) {
-                    localStorage.removeItem('devstudio_data');
-                    location.reload();
-                }
-            },
+            clearAllData() {
+                if (confirm('Are you sure? This will delete all files and history.')) {
+                    localStorage.removeItem('devstudio_data');
+                    location.reload();
+                }
+            },
 
-            closeModal(id) {
-                document.getElementById(id).classList.add('hidden');
-            },
+            closeModal(id) {
+                document.getElementById(id).classList.add('hidden');
+            },
 
-            showToast(message) {
-                const toast = document.createElement('div');
-                toast.className = 'toast';
-                toast.textContent = message;
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 3000);
-            },
+            showToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
+            },
 
-            setupAutoSave() {
-                setInterval(() => {
-                    if (this.currentFile) this.saveToStorage();
-                }, 30000);
-            }
-        };
+            setupAutoSave() {
+                setInterval(() => {
+                    if (this.currentFile) this.saveToStorage();
+                }, 30000);
+            }
+        };
 
-        window.addEventListener('DOMContentLoaded', () => app.init());
-    </script>
+        window.addEventListener('DOMContentLoaded', () => app.init());
+    </script>
 </body>
 </html>
