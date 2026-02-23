@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>DevStudio - AI-Powered Development Environment</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -11,107 +10,133 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
         
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         
-        html, body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: #0f172a;
+            color: #e2e8f0;
             overflow: hidden;
-            font-family: 'Inter', sans-serif;
         }
         
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #1e1e1e; }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-        
-        /* Animations */
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); } 50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); } }
-        
-        .slide-in { animation: slideIn 0.3s ease-out; }
-        .fade-in { animation: fadeIn 0.3s ease-out; }
-        .ai-thinking { animation: pulse-glow 2s infinite; }
-        
-        /* Layout Fixes */
-        .app-container {
-            display: flex;
-            flex-direction: column;
+        /* Main Grid Layout */
+        .app-grid {
+            display: grid;
+            grid-template-rows: 56px 1fr;
+            grid-template-columns: 260px 1fr 350px;
+            grid-template-areas: 
+                "header header header"
+                "sidebar editor preview";
             height: 100vh;
             width: 100vw;
-            overflow: hidden;
         }
         
-        .main-content {
+        /* Header */
+        .header {
+            grid-area: header;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
             display: flex;
-            flex: 1;
-            overflow: hidden;
-            min-height: 0; /* Critical for flex child scrolling */
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 50;
         }
         
+        /* Sidebar */
         .sidebar {
-            width: 256px;
-            min-width: 256px;
-            max-width: 256px;
+            grid-area: sidebar;
+            background: #1e293b;
+            border-right: 1px solid #334155;
             display: flex;
             flex-direction: column;
-            background: #1f2937;
-            border-right: 1px solid #374151;
             overflow: hidden;
         }
         
-        .editor-area {
+        .sidebar-top {
             flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        .sidebar-bottom {
+            height: 200px;
+            border-top: 1px solid #334155;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        
+        /* Editor Section */
+        .editor-section {
+            grid-area: editor;
             display: flex;
             flex-direction: column;
-            min-width: 0;
+            background: #0f172a;
             overflow: hidden;
-            background: #111827;
+            min-width: 0;
         }
         
-        .preview-area {
-            width: 33.333%;
-            min-width: 300px;
-            max-width: 50%;
+        .tabs-bar {
+            height: 36px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
             display: flex;
-            flex-direction: column;
-            background: #111827;
-            border-left: 1px solid #374151;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
         
-        /* Editor specific */
+        .tab {
+            height: 36px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-right: 1px solid #334155;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+            background: #1e293b;
+            color: #94a3b8;
+        }
+        
+        .tab.active {
+            background: #334155;
+            color: #f8fafc;
+            border-top: 2px solid #3b82f6;
+        }
+        
         .editor-container {
             flex: 1;
             position: relative;
-            min-height: 0;
             overflow: hidden;
+            min-height: 0;
         }
         
-        .monaco-editor {
-            position: absolute !important;
+        #monaco-editor {
+            position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
         }
         
-        /* Chat panel */
         .chat-panel {
-            height: 250px;
-            min-height: 200px;
-            max-height: 400px;
+            height: 220px;
+            border-top: 1px solid #334155;
+            background: #1e293b;
             display: flex;
             flex-direction: column;
-            border-top: 1px solid #374151;
-            background: #1f2937;
+        }
+        
+        .chat-header {
+            height: 32px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            cursor: pointer;
+            background: #252f47;
         }
         
         .chat-messages {
@@ -120,151 +145,67 @@
             padding: 12px;
         }
         
-        /* Resizer */
-        .resizer {
-            width: 6px;
-            background: #374151;
-            cursor: col-resize;
-            transition: background 0.2s;
-            flex-shrink: 0;
+        .chat-input-area {
+            padding: 12px;
+            border-top: 1px solid #334155;
+        }
+        
+        /* Preview Section */
+        .preview-section {
+            grid-area: preview;
+            background: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .preview-header {
+            height: 36px;
+            padding: 0 12px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #334155;
+            background: #1e293b;
         }
         
-        .resizer:hover {
-            background: #3b82f6;
-        }
-        
-        .resizer::after {
-            content: '';
-            width: 2px;
-            height: 20px;
-            background: #6b7280;
-            border-radius: 1px;
-        }
-        
-        /* Version timeline */
-        .version-dot { 
-            width: 12px; 
-            height: 12px; 
-            border-radius: 50%; 
-            background: #4b5563; 
-            border: 2px solid #1f2937; 
-            transition: all 0.2s; 
-            flex-shrink: 0;
-        }
-        .version-dot:hover { background: #3b82f6; transform: scale(1.2); }
-        .version-dot.active { background: #10b981; border-color: #10b981; }
-        .version-line { 
-            width: 2px; 
-            background: #374151; 
-            flex: 1; 
-            margin: 4px 0; 
-            min-height: 20px;
-        }
-        
-        /* Chat bubbles */
-        .chat-bubble { 
-            max-width: 85%; 
-            padding: 10px 14px; 
-            border-radius: 12px; 
-            margin: 6px 0; 
-            word-wrap: break-word;
-            font-size: 13px;
-            line-height: 1.4;
-        }
-        .chat-bubble.user { 
-            background: #3b82f6; 
-            color: white; 
-            align-self: flex-end; 
-            margin-left: auto; 
-        }
-        .chat-bubble.ai { 
-            background: #374151; 
-            color: #e5e7eb; 
-            border: 1px solid #4b5563; 
-        }
-        
-        /* Loading spinner */
-        .spinner { 
-            border: 3px solid #374151; 
-            border-top: 3px solid #3b82f6; 
-            border-radius: 50%; 
-            width: 24px; 
-            height: 24px; 
-            animation: spin 1s linear infinite; 
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* Provider badges */
-        .provider-badge { 
-            display: inline-flex; 
-            align-items: center; 
-            gap: 4px; 
-            padding: 2px 8px; 
-            border-radius: 12px; 
-            font-size: 11px; 
-            font-weight: 600; 
-        }
-        .provider-openai { background: #10a37f; color: white; }
-        .provider-anthropic { background: #d4a574; color: #1a1a1a; }
-        .provider-google { background: #4285f4; color: white; }
-        .provider-deepseek { background: #4f46e5; color: white; }
-        .provider-local { background: #6b7280; color: white; }
-        
-        /* Preview iframe */
-        #preview-frame { 
-            border: none; 
-            width: 100%; 
-            height: 100%; 
+        .preview-content {
+            flex: 1;
+            position: relative;
             background: white;
+            overflow: hidden;
+        }
+        
+        #preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
             display: block;
         }
         
-        /* Fix for empty state */
-        .empty-state {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #111827;
-            z-index: 10;
-        }
-        
-        /* Tabs */
-        .tabs-container {
-            height: 36px;
-            min-height: 36px;
-            display: flex;
-            overflow-x: auto;
-            overflow-y: hidden;
-            background: #1f2937;
-            border-bottom: 1px solid #374151;
-        }
-        
-        .tab {
-            height: 36px;
-            display: flex;
-            align-items: center;
-            padding: 0 12px;
-            gap: 8px;
-            border-right: 1px solid #374151;
-            cursor: pointer;
-            white-space: nowrap;
+        /* Chat Bubbles */
+        .chat-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
             font-size: 13px;
-            min-width: 100px;
-            max-width: 200px;
+            line-height: 1.4;
         }
         
-        /* File tree */
-        .file-tree {
-            flex: 1;
-            overflow-y: auto;
-            padding: 8px;
+        .chat-bubble.user {
+            background: #3b82f6;
+            color: white;
+            margin-left: auto;
         }
         
+        .chat-bubble.ai {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        
+        /* File Tree */
         .file-item {
             display: flex;
             align-items: center;
@@ -274,295 +215,421 @@
             cursor: pointer;
             font-size: 13px;
             margin-bottom: 2px;
+            color: #cbd5e1;
         }
         
-        /* Modal fixes */
-        .modal-overlay {
+        .file-item:hover {
+            background: #334155;
+        }
+        
+        .file-item.active {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        /* Version Items */
+        .version-item {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 4px;
+        }
+        
+        .version-item:hover {
+            background: #334155;
+        }
+        
+        .version-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #64748b;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+        
+        .version-dot.active {
+            background: #10b981;
+        }
+        
+        .version-line {
+            width: 2px;
+            background: #475569;
+            margin-left: 4px;
+            flex-grow: 1;
+            min-height: 20px;
+        }
+        
+        /* Modals */
+        .modal {
             position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.7);
-            z-index: 100;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 100;
             padding: 20px;
         }
         
-        .modal-content {
-            background: #1f2937;
+        .modal.hidden { display: none; }
+        
+        .modal-box {
+            background: #1e293b;
+            border: 1px solid #334155;
             border-radius: 12px;
-            border: 1px solid #374151;
-            max-width: 500px;
             width: 100%;
+            max-width: 480px;
             max-height: 90vh;
             overflow-y: auto;
+            padding: 24px;
         }
         
-        /* Ensure inputs don't break layout */
-        input, select, textarea {
-            max-width: 100%;
+        /* Buttons */
+        .btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        
+        .btn-secondary {
+            background: #334155;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background: #475569;
+        }
+        
+        /* Inputs */
+        .input {
+            width: 100%;
+            padding: 8px 12px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-top: 4px;
+        }
+        
+        .input:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        /* Utility */
+        .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 8px; }
+        .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; }
+        .text-sm { font-size: 14px; }
+        .font-semibold { font-weight: 600; }
+        .text-gray-400 { color: #94a3b8; }
+        .text-gray-500 { color: #64748b; }
+        .mb-2 { margin-bottom: 8px; }
+        .mb-4 { margin-bottom: 16px; }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .p-2 { padding: 8px; }
+        .rounded { border-radius: 6px; }
+        
+        /* Provider Badge */
+        .provider-badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        
+        .badge-openai { background: #10a37f; color: white; }
+        .badge-anthropic { background: #d4a574; color: #1a1a1a; }
+        .badge-google { background: #4285f4; color: white; }
+        .badge-deepseek { background: #4f46e5; color: white; }
+        .badge-local { background: #64748b; color: white; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+        }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1e293b;
+            border: 1px solid #334155;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 200;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
     </style>
 </head>
-<body class="bg-gray-900 text-gray-100">
+<body>
 
-    <div class="app-container">
+    <div class="app-grid">
         <!-- Header -->
-        <header class="h-14 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-4 shrink-0">
+        <header class="header">
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shrink-0">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                     <i class="fas fa-code text-white text-sm"></i>
                 </div>
-                <h1 class="font-semibold text-lg tracking-tight">DevStudio</h1>
-                <span class="text-xs bg-gray-700 px-2 py-1 rounded text-gray-400">v1.0</span>
-                <span id="active-provider" class="provider-badge provider-openai hidden">OpenAI</span>
+                <h1 class="font-semibold text-lg">DevStudio</h1>
+                <span class="text-xs bg-slate-700 px-2 py-1 rounded text-gray-400">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai hidden">OpenAI</span>
             </div>
 
             <div class="flex items-center gap-2">
-                <button onclick="app.toggleSettings()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="Settings">
-                    <i class="fas fa-cog text-gray-400"></i>
+                <button onclick="app.toggleSettings()" class="p-2 hover:bg-slate-700 rounded-lg text-gray-400" title="Settings">
+                    <i class="fas fa-cog"></i>
                 </button>
-                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-sm">
+                <button onclick="app.showGitHubModal()" class="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
                     <i class="fab fa-github"></i>
-                    <span id="github-status" class="truncate max-w-[150px]">Connect GitHub</span>
+                    <span id="github-status" class="truncate max-w-[120px]">Connect GitHub</span>
                 </button>
-                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-sm font-medium">
+                <button onclick="app.deployToGitHub()" class="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium text-white">
                     <i class="fas fa-cloud-upload-alt"></i>
                     <span>Sync</span>
                 </button>
             </div>
         </header>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            
-            <!-- Left Sidebar: File Explorer -->
-            <aside class="sidebar">
-                <div class="p-3 border-b border-gray-700 flex items-center justify-between shrink-0">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-top">
+                <div class="flex items-center justify-between p-2 mb-2">
                     <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Explorer</span>
                     <div class="flex gap-1">
-                        <button onclick="app.createFile()" class="p-1.5 hover:bg-gray-700 rounded" title="New File">
-                            <i class="fas fa-file-medical text-xs text-gray-400"></i>
+                        <button onclick="app.createFile()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="New File">
+                            <i class="fas fa-file-medical text-xs"></i>
                         </button>
-                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-gray-700 rounded" title="New Folder">
-                            <i class="fas fa-folder-plus text-xs text-gray-400"></i>
+                        <button onclick="app.createFolder()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="New Folder">
+                            <i class="fas fa-folder-plus text-xs"></i>
                         </button>
                     </div>
                 </div>
-                <div id="file-tree" class="file-tree">
-                    <!-- File tree rendered here -->
+                <div id="file-tree">
+                    <!-- Files rendered here -->
                 </div>
-                
-                <!-- Version History Panel -->
-                <div class="h-48 border-t border-gray-700 flex flex-col shrink-0">
-                    <div class="p-3 border-b border-gray-700 flex items-center justify-between shrink-0">
-                        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
-                        <button onclick="app.createCheckpoint()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded">
-                            <i class="fas fa-save mr-1"></i>Save
-                        </button>
-                    </div>
-                    <div id="version-list" class="flex-1 overflow-y-auto p-3 space-y-2">
-                        <!-- Versions rendered here -->
-                    </div>
+            </div>
+            
+            <div class="sidebar-bottom">
+                <div class="flex items-center justify-between p-2 mb-2 border-b border-slate-700">
+                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">History</span>
+                    <button onclick="app.createCheckpoint()" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">
+                        <i class="fas fa-save mr-1"></i>Save
+                    </button>
                 </div>
-            </aside>
+                <div id="version-list">
+                    <!-- Versions rendered here -->
+                </div>
+            </div>
+        </aside>
 
-            <!-- Center: Editor -->
-            <div class="editor-area">
-                <!-- Tabs -->
-                <div id="tabs-container" class="tabs-container">
-                    <!-- Tabs rendered here -->
-                </div>
-                
-                <!-- Editor Area -->
-                <div class="editor-container">
-                    <div id="monaco-editor"></div>
-                    <div id="empty-state" class="empty-state hidden">
-                        <div class="text-center text-gray-500">
-                            <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
-                            <p>Select a file to start editing</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- AI Chat Panel -->
-                <div id="chat-panel" class="chat-panel">
-                    <div class="h-8 bg-gray-750 border-b border-gray-700 flex items-center justify-between px-3 cursor-pointer shrink-0" onclick="app.toggleChat()">
-                        <div class="flex items-center gap-2">
-                            <i class="fas fa-robot text-blue-400 text-xs"></i>
-                            <span class="text-xs font-medium">AI Assistant</span>
-                            <span id="ai-status" class="text-[10px] bg-gray-700 px-1.5 rounded text-gray-400">Ready</span>
-                            <span id="current-model-badge" class="text-[10px] bg-blue-900 text-blue-200 px-1.5 rounded hidden">GPT-4</span>
-                        </div>
-                        <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
-                    </div>
-                    <div id="chat-messages" class="chat-messages space-y-2">
-                        <div class="chat-bubble ai">
-                            <p>Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?</p>
-                        </div>
-                    </div>
-                    <div class="p-3 border-t border-gray-700 bg-gray-850 shrink-0">
-                        <div class="flex gap-2">
-                            <input type="text" id="chat-input" placeholder="Ask me to modify code..." 
-                                   class="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                                   onkeypress="if(event.key==='Enter') app.sendMessage()">
-                            <button onclick="app.sendMessage()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors shrink-0">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                        <div class="flex gap-2 mt-2 flex-wrap">
-                            <button onclick="app.quickAction('explain')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Explain</button>
-                            <button onclick="app.quickAction('fix')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
-                            <button onclick="app.quickAction('optimize')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Optimize</button>
-                            <button onclick="app.quickAction('document')" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
-                        </div>
+        <!-- Editor Section -->
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container">
+                <!-- Tabs rendered here -->
+            </div>
+            
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state hidden">
+                    <div class="text-center">
+                        <i class="fas fa-code text-4xl mb-3 opacity-50"></i>
+                        <p>Select a file to start editing</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Resizer -->
-            <div class="resizer" id="resizer"></div>
-
-            <!-- Right: Live Preview -->
-            <div class="preview-area" id="preview-panel">
-                <div class="h-9 bg-gray-800 border-b border-gray-700 flex items-center justify-between px-3 shrink-0">
-                    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-robot text-blue-400 text-xs"></i>
+                        <span class="text-xs font-semibold">AI Assistant</span>
+                        <span id="ai-status" class="text-[10px] bg-slate-700 px-1.5 rounded text-gray-400">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down text-gray-500 text-xs"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">
+                        Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." 
+                               onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary">
+                            <i class="fas fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
                     <div class="flex gap-2">
-                        <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-gray-700 rounded" title="Refresh">
-                            <i class="fas fa-sync-alt text-xs text-gray-400"></i>
-                        </button>
-                        <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-gray-700 rounded" title="Open in New Tab">
-                            <i class="fas fa-external-link-alt text-xs text-gray-400"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="flex-1 relative bg-white min-h-0">
-                    <iframe id="preview-frame"></iframe>
-                    <div id="preview-loading" class="absolute inset-0 bg-gray-900 flex items-center justify-center hidden">
-                        <div class="spinner"></div>
+                        <button onclick="app.quickAction('explain')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Explain</button>
+                        <button onclick="app.quickAction('fix')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Optimize</button>
+                        <button onclick="app.quickAction('document')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-gray-300">Add Docs</button>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
+
+        <!-- Preview Section -->
+        <section class="preview-section">
+            <div class="preview-header">
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Live Preview</span>
+                <div class="flex gap-2">
+                    <button onclick="app.refreshPreview()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="Refresh">
+                        <i class="fas fa-sync-alt text-xs"></i>
+                    </button>
+                    <button onclick="app.openPreviewInNewTab()" class="p-1.5 hover:bg-slate-700 rounded text-gray-400" title="Open in New Tab">
+                        <i class="fas fa-external-link-alt text-xs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="preview-content">
+                <iframe id="preview-frame"></iframe>
+            </div>
+        </section>
     </div>
 
     <!-- Modals -->
     
-    <!-- GitHub Connect Modal -->
-    <div id="github-modal" class="modal-overlay hidden">
-        <div class="modal-content p-6">
+    <!-- GitHub Modal -->
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
             <h2 class="text-xl font-semibold mb-4 flex items-center gap-2">
                 <i class="fab fa-github"></i> Connect to GitHub
             </h2>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Personal Access Token</label>
-                    <input type="password" id="github-token" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="ghp_...">
-                    <p class="text-xs text-gray-500 mt-1">Create one at GitHub Settings > Developer settings > Personal access tokens</p>
-                </div>
-                <div>
-                    <label class="block text-sm text-gray-400 mb-1">Repository (owner/repo)</label>
-                    <input type="text" id="github-repo" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="username/my-project">
-                </div>
-                <div class="flex gap-2 pt-2">
-                    <button onclick="app.connectGitHub()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg font-medium transition-colors">Connect</button>
-                    <button onclick="app.closeModal('github-modal')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg transition-colors">Cancel</button>
-                </div>
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p class="text-xs text-gray-500 mt-1">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.connectGitHub()" class="btn btn-primary flex-1">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary flex-1">Cancel</button>
             </div>
         </div>
     </div>
 
     <!-- Settings Modal -->
-    <div id="settings-modal" class="modal-overlay hidden">
-        <div class="modal-content p-6">
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-box">
             <h2 class="text-xl font-semibold mb-4">Settings</h2>
             
-            <div class="space-y-6">
-                <!-- AI Configuration -->
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">AI Configuration</h3>
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">AI Provider</label>
-                            <select id="ai-provider" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" onchange="app.updateAISettings()">
-                                <option value="openai">OpenAI (GPT-4)</option>
-                                <option value="anthropic">Anthropic (Claude)</option>
-                                <option value="google">Google (Gemini)</option>
-                                <option value="deepseek">Deepseek (Deepseek-V3/R1)</option>
-                                <option value="local">Local/Custom Endpoint</option>
-                            </select>
-                            <p class="text-xs text-gray-500 mt-1" id="provider-help">Select your AI provider and enter API credentials below</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">API Key</label>
-                            <input type="password" id="ai-api-key" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="sk-...">
-                            <p class="text-xs text-gray-500 mt-1" id="api-key-help">Get your key from platform.openai.com</p>
-                        </div>
-                        <div>
-                            <label class="block text-sm text-gray-400 mb-1">Model</label>
-                            <input type="text" id="ai-model" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="gpt-4, claude-3-opus, deepseek-chat, etc.">
-                            <p class="text-xs text-gray-500 mt-1">Deepseek: use 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
-                        </div>
-                        <div id="local-endpoint-container" class="hidden">
-                            <label class="block text-sm text-gray-400 mb-1">Custom Endpoint URL</label>
-                            <input type="text" id="ai-endpoint" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm" placeholder="http://localhost:11434/v1/chat/completions">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Editor Settings -->
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Editor</h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-gray-400">Theme</span>
-                            <select id="editor-theme" class="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onchange="app.updateEditorTheme()">
-                                <option value="vs-dark">Dark</option>
-                                <option value="vs">Light</option>
-                                <option value="hc-black">High Contrast</option>
-                            </select>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-gray-400">Font Size</span>
-                            <input type="number" id="font-size" value="14" min="10" max="24" class="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm" onchange="app.updateFontSize()">
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-gray-400">Word Wrap</span>
-                            <input type="checkbox" id="word-wrap" checked class="rounded bg-gray-700" onchange="app.toggleWordWrap()">
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Project Settings -->
-                <div>
-                    <h3 class="text-sm font-semibold text-gray-300 mb-3 uppercase tracking-wider">Project</h3>
-                    <button onclick="app.exportProject()" class="w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm transition-colors mb-2">
-                        <i class="fas fa-download mr-2"></i>Export Project
-                    </button>
-                    <button onclick="app.clearAllData()" class="w-full bg-red-900/50 hover:bg-red-900/80 text-red-200 py-2 rounded-lg text-sm transition-colors">
-                        <i class="fas fa-trash mr-2"></i>Clear All Data
-                    </button>
-                </div>
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">AI Provider</label>
+                <select id="ai-provider" class="input" onchange="app.updateAISettings()">
+                    <option value="openai">OpenAI (GPT-4)</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="deepseek">Deepseek (V3/R1)</option>
+                    <option value="local">Local/Custom</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1" id="provider-help">Get your key from platform.openai.com</p>
             </div>
-
-            <button onclick="app.closeModal('settings-modal')" class="mt-6 w-full bg-gray-700 hover:bg-gray-600 py-2 rounded-lg transition-colors">Close</button>
+            
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">API Key</label>
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">Model</label>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc.">
+                <p class="text-xs text-gray-500 mt-1">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
+            </div>
+            
+            <div id="local-endpoint-container" class="mb-4 hidden">
+                <label class="text-sm text-gray-400">Custom Endpoint</label>
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
+            </div>
+            
+            <div class="mb-4">
+                <label class="text-sm text-gray-400">Editor Theme</label>
+                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
+                    <option value="vs-dark">Dark</option>
+                    <option value="vs">Light</option>
+                    <option value="hc-black">High Contrast</option>
+                </select>
+            </div>
+            
+            <div class="flex gap-2 mt-4">
+                <button onclick="app.exportProject()" class="btn btn-secondary flex-1">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+                <button onclick="app.clearAllData()" class="btn btn-secondary flex-1 text-red-400">
+                    <i class="fas fa-trash mr-2"></i>Clear Data
+                </button>
+            </div>
+            
+            <button onclick="app.closeModal('settings-modal')" class="btn btn-secondary w-full mt-4">Close</button>
         </div>
     </div>
 
     <!-- New File Modal -->
-    <div id="new-file-modal" class="modal-overlay hidden">
-        <div class="modal-content p-6" style="max-width: 320px;">
+    <div id="new-file-modal" class="modal hidden">
+        <div class="modal-box" style="max-width: 320px;">
             <h3 class="text-lg font-semibold mb-3">Create New File</h3>
-            <input type="text" id="new-file-name" class="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm mb-4 focus:outline-none focus:border-blue-500" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <input type="text" id="new-file-name" class="input mb-4" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
             <div class="flex gap-2">
-                <button onclick="app.confirmCreateFile()" class="flex-1 bg-blue-600 hover:bg-blue-500 py-2 rounded-lg text-sm font-medium">Create</button>
-                <button onclick="app.closeModal('new-file-modal')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg text-sm">Cancel</button>
+                <button onclick="app.confirmCreateFile()" class="btn btn-primary flex-1">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary flex-1">Cancel</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Application State
         const app = {
             editor: null,
             currentFile: null,
@@ -572,54 +639,13 @@
             ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
             settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
             chatCollapsed: false,
-            chatHeight: 250,
             
             providers: {
-                openai: {
-                    name: 'OpenAI',
-                    baseUrl: 'https://api.openai.com/v1/chat/completions',
-                    authHeader: 'Authorization',
-                    authPrefix: 'Bearer ',
-                    model: 'gpt-4',
-                    badgeClass: 'provider-openai',
-                    helpText: 'Get your API key from platform.openai.com'
-                },
-                anthropic: {
-                    name: 'Anthropic',
-                    baseUrl: 'https://api.anthropic.com/v1/messages',
-                    authHeader: 'x-api-key',
-                    authPrefix: '',
-                    model: 'claude-3-opus-20240229',
-                    badgeClass: 'provider-anthropic',
-                    helpText: 'Get your API key from console.anthropic.com'
-                },
-                google: {
-                    name: 'Google',
-                    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-                    authHeader: 'key',
-                    authPrefix: '',
-                    model: 'gemini-pro',
-                    badgeClass: 'provider-google',
-                    helpText: 'Get your API key from makersuite.google.com'
-                },
-                deepseek: {
-                    name: 'Deepseek',
-                    baseUrl: 'https://api.deepseek.com/chat/completions',
-                    authHeader: 'Authorization',
-                    authPrefix: 'Bearer ',
-                    model: 'deepseek-chat',
-                    badgeClass: 'provider-deepseek',
-                    helpText: 'Get your API key from platform.deepseek.com'
-                },
-                local: {
-                    name: 'Local',
-                    baseUrl: '',
-                    authHeader: 'Authorization',
-                    authPrefix: 'Bearer ',
-                    model: 'local-model',
-                    badgeClass: 'provider-local',
-                    helpText: 'Enter your local endpoint URL below'
-                }
+                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', badge: 'badge-openai', help: 'Get your key from platform.openai.com' },
+                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', badge: 'badge-anthropic', help: 'Get your key from console.anthropic.com' },
+                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', badge: 'badge-google', help: 'Get your key from makersuite.google.com' },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', badge: 'badge-deepseek', help: 'Get your key from platform.deepseek.com' },
+                local: { name: 'Local', baseUrl: '', model: 'local-model', badge: 'badge-local', help: 'Enter your local endpoint URL' }
             },
 
             init() {
@@ -627,11 +653,9 @@
                 this.initMonaco();
                 this.renderFileTree();
                 this.renderVersions();
-                this.setupResizer();
                 this.setupAutoSave();
                 this.updateProviderUI();
                 
-                // Load settings into UI
                 document.getElementById('ai-provider').value = this.ai.provider;
                 document.getElementById('ai-api-key').value = this.ai.apiKey;
                 document.getElementById('ai-model').value = this.ai.model;
@@ -640,55 +664,24 @@
                 if (this.github.connected) {
                     document.getElementById('github-status').textContent = this.github.repo;
                 }
-                
-                // Handle window resize properly
-                window.addEventListener('resize', () => {
-                    this.handleResize();
-                });
-                
-                // Initial layout
-                setTimeout(() => this.handleResize(), 100);
-            },
-
-            handleResize() {
-                if (this.editor) {
-                    this.editor.layout();
-                }
             },
 
             initMonaco() {
-                require.config({ 
-                    paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }
-                });
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
                 
                 require(['vs/editor/editor.main'], () => {
-                    const editorContainer = document.getElementById('monaco-editor');
-                    
-                    // Ensure container has proper dimensions
-                    editorContainer.style.width = '100%';
-                    editorContainer.style.height = '100%';
-                    
-                    this.editor = monaco.editor.create(editorContainer, {
+                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
                         value: '',
                         language: 'javascript',
                         theme: this.settings.theme,
                         fontSize: this.settings.fontSize,
                         wordWrap: this.settings.wordWrap ? 'on' : 'off',
-                        automaticLayout: true, // This helps with resizing
+                        automaticLayout: true,
                         minimap: { enabled: true },
                         scrollBeyondLastLine: false,
-                        roundedSelection: false,
-                        padding: { top: 16 },
-                        renderLineHighlight: 'all',
-                        selectOnLineNumbers: true,
-                        matchBrackets: 'always',
-                        quickSuggestions: true,
-                        suggestOnTriggerCharacters: true,
-                        acceptSuggestionOnEnter: 'on',
-                        fixedOverflowWidgets: true // Prevents widgets from breaking layout
+                        fixedOverflowWidgets: true
                     });
 
-                    // Auto-update preview on change with debounce
                     let timeout;
                     this.editor.onDidChangeModelContent(() => {
                         if (this.currentFile) {
@@ -702,32 +695,19 @@
                             }, 1000);
                         }
                     });
-                    
-                    // Force layout after init
-                    setTimeout(() => this.editor.layout(), 100);
                 });
             },
 
             updateProviderUI() {
-                const provider = this.providers[this.ai.provider];
+                const p = this.providers[this.ai.provider];
                 const badge = document.getElementById('active-provider');
-                const modelBadge = document.getElementById('current-model-badge');
-                
                 if (badge) {
-                    badge.className = `provider-badge ${provider.badgeClass}`;
-                    badge.textContent = provider.name;
+                    badge.className = `provider-badge ${p.badge}`;
+                    badge.textContent = p.name;
                     badge.classList.remove('hidden');
                 }
-                
-                if (modelBadge && this.ai.model) {
-                    modelBadge.textContent = this.ai.model;
-                    modelBadge.classList.remove('hidden');
-                }
-                
-                const helpText = document.getElementById('provider-help');
-                const apiKeyHelp = document.getElementById('api-key-help');
-                if (helpText) helpText.textContent = provider.helpText;
-                if (apiKeyHelp) apiKeyHelp.textContent = provider.helpText;
+                const help = document.getElementById('provider-help');
+                if (help) help.textContent = p.help;
             },
 
             createFile() {
@@ -768,8 +748,6 @@
                         this.getLanguage(filename)
                     );
                     this.editor.setModel(model);
-                    // Force layout after opening file
-                    setTimeout(() => this.editor.layout(), 50);
                 }
                 
                 this.renderTabs();
@@ -799,11 +777,7 @@
 
             getLanguage(filename) {
                 const ext = filename.split('.').pop();
-                const map = {
-                    'js': 'javascript', 'ts': 'typescript', 'html': 'html',
-                    'css': 'css', 'json': 'json', 'py': 'python',
-                    'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript'
-                };
+                const map = { 'js': 'javascript', 'ts': 'typescript', 'html': 'html', 'css': 'css', 'json': 'json', 'py': 'python', 'md': 'markdown', 'jsx': 'javascript', 'tsx': 'typescript' };
                 return map[ext] || 'plaintext';
             },
 
@@ -817,7 +791,8 @@
                 
                 Object.keys(this.files).sort().forEach(filename => {
                     const div = document.createElement('div');
-                    div.className = `file-item ${this.currentFile === filename ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-gray-700 text-gray-300'}`;
+                    const isActive = this.currentFile === filename;
+                    div.className = `file-item ${isActive ? 'active' : ''}`;
                     
                     const isFolder = this.files[filename].type === 'folder';
                     const icon = isFolder ? 'fa-folder text-yellow-500' : this.getFileIcon(filename);
@@ -848,11 +823,11 @@
                 
                 Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
                     const tab = document.createElement('div');
-                    tab.className = `tab ${this.currentFile === filename ? 'bg-gray-700 text-white border-t-2 border-t-blue-500' : 'bg-gray-800 text-gray-400 hover:bg-gray-750'}`;
+                    tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
                     tab.innerHTML = `
                         <i class="fas ${this.getFileIcon(filename)} text-xs"></i>
-                        <span class="flex-1 truncate">${filename}</span>
-                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1 p-1"><i class="fas fa-times text-xs"></i></button>
+                        <span class="truncate max-w-[100px]">${filename}</span>
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" class="hover:text-red-400 ml-1"><i class="fas fa-times text-xs"></i></button>
                     `;
                     tab.onclick = () => this.openFile(filename);
                     container.appendChild(tab);
@@ -877,17 +852,15 @@
 
             restoreVersion(id) {
                 const version = this.versions.find(v => v.id === id);
-                if (version) {
-                    if (confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
-                        this.createCheckpoint();
-                        this.files = JSON.parse(JSON.stringify(version.files));
-                        this.saveToStorage();
-                        this.renderFileTree();
-                        if (this.currentFile && this.files[this.currentFile]) {
-                            this.openFile(this.currentFile);
-                        }
-                        this.showToast('Version restored!');
+                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
+                    this.createCheckpoint();
+                    this.files = JSON.parse(JSON.stringify(version.files));
+                    this.saveToStorage();
+                    this.renderFileTree();
+                    if (this.currentFile && this.files[this.currentFile]) {
+                        this.openFile(this.currentFile);
                     }
+                    this.showToast('Version restored!');
                 }
             },
 
@@ -897,14 +870,15 @@
                 
                 this.versions.forEach((version, index) => {
                     const div = document.createElement('div');
-                    div.className = 'flex items-start gap-3 cursor-pointer group';
+                    div.className = 'version-item';
+                    div.onclick = () => this.restoreVersion(version.id);
                     div.innerHTML = `
-                        <div class="flex flex-col items-center pt-1">
+                        <div class="flex flex-col items-center">
                             <div class="version-dot ${index === 0 ? 'active' : ''}"></div>
                             ${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}
                         </div>
-                        <div class="flex-1 pb-4 min-w-0" onclick="app.restoreVersion(${version.id})">
-                            <div class="text-xs font-medium text-gray-300 group-hover:text-blue-400 transition-colors truncate">${version.message}</div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-xs font-medium text-gray-300 truncate">${version.message}</div>
                             <div class="text-[10px] text-gray-500">${new Date(version.timestamp).toLocaleString()}</div>
                         </div>
                     `;
@@ -914,11 +888,9 @@
 
             updatePreview() {
                 if (!this.currentFile || !this.isPreviewable(this.currentFile)) return;
-                
                 const html = this.files[this.currentFile]?.content || '';
                 const blob = new Blob([html], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
-                
                 document.getElementById('preview-frame').src = url;
             },
 
@@ -944,20 +916,17 @@
                 input.value = '';
                 
                 document.getElementById('ai-status').textContent = 'Thinking...';
-                document.getElementById('ai-status').classList.add('ai-thinking');
                 
                 try {
                     const response = await this.callAI(message);
                     this.addChatMessage(response, 'ai');
-                    
                     if (response.includes('```')) {
-                        this.addChatMessage('Would you like me to apply these changes? <button onclick="app.applyAIChanges()" class="text-blue-400 underline hover:text-blue-300">Apply Changes</button>', 'ai');
+                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" class="text-blue-400 underline">Apply Changes</button> to update the file.', 'ai');
                     }
                 } catch (error) {
                     this.addChatMessage('Error: ' + error.message, 'ai');
                 } finally {
                     document.getElementById('ai-status').textContent = 'Ready';
-                    document.getElementById('ai-status').classList.remove('ai-thinking');
                 }
             },
 
@@ -976,39 +945,17 @@
 
                 if (provider === 'openai' || provider === 'deepseek') {
                     url = config.baseUrl;
-                    headers = { 
-                        'Authorization': `${config.authPrefix}${apiKey}`, 
-                        'Content-Type': 'application/json' 
-                    };
-                    body = JSON.stringify({ 
-                        model: model || config.model, 
-                        messages: [
-                            { role: 'system', content: 'You are a helpful coding assistant. Provide concise, working code solutions.' },
-                            { role: 'user', content: context }
-                        ],
-                        temperature: 0.7,
-                        max_tokens: 4096
-                    });
+                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+                    body = JSON.stringify({ model: model || config.model, messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }], temperature: 0.7, max_tokens: 4096 });
                 } else if (provider === 'anthropic') {
                     url = config.baseUrl;
-                    headers = { 
-                        [config.authHeader]: apiKey, 
-                        'Content-Type': 'application/json',
-                        'anthropic-version': '2023-06-01'
-                    };
-                    body = JSON.stringify({ 
-                        model: model || config.model, 
-                        max_tokens: 4096, 
-                        messages: [{ role: 'user', content: context }] 
-                    });
+                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+                    body = JSON.stringify({ model: model || config.model, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
                 } else if (provider === 'google') {
                     const modelName = model || config.model;
                     url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
                     headers = { 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ 
-                        contents: [{ parts: [{ text: context }] }],
-                        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
-                    });
+                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
                 } else {
                     url = endpoint;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
@@ -1016,14 +963,9 @@
                 }
 
                 const response = await fetch(url, { method: 'POST', headers, body });
-                
-                if (!response.ok) {
-                    const error = await response.text();
-                    throw new Error(`API Error: ${error}`);
-                }
+                if (!response.ok) throw new Error('API request failed');
                 
                 const data = await response.json();
-                
                 if (provider === 'anthropic') return data.content[0].text;
                 if (provider === 'google') return data.candidates[0].content.parts[0].text;
                 return data.choices[0].message.content;
@@ -1032,19 +974,14 @@
             addChatMessage(text, sender) {
                 const container = document.getElementById('chat-messages');
                 const div = document.createElement('div');
-                div.className = `chat-bubble ${sender} slide-in`;
+                div.className = `chat-bubble ${sender}`;
                 div.innerHTML = text;
                 container.appendChild(div);
                 container.scrollTop = container.scrollHeight;
             },
 
             quickAction(action) {
-                const actions = {
-                    explain: 'Explain what this code does in detail',
-                    fix: 'Find and fix any bugs in this code',
-                    optimize: 'Optimize this code for better performance',
-                    document: 'Add comprehensive documentation/comments to this code'
-                };
+                const actions = { explain: 'Explain this code', fix: 'Fix bugs in this code', optimize: 'Optimize this code', document: 'Add documentation to this code' };
                 document.getElementById('chat-input').value = actions[action];
                 this.sendMessage();
             },
@@ -1053,7 +990,6 @@
                 const messages = document.getElementById('chat-messages').children;
                 const lastMessage = messages[messages.length - 2];
                 const text = lastMessage.textContent;
-                
                 const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
                 if (codeBlock && this.currentFile) {
                     this.files[this.currentFile].content = codeBlock[1].trim();
@@ -1068,17 +1004,13 @@
                 this.chatCollapsed = !this.chatCollapsed;
                 
                 if (this.chatCollapsed) {
-                    this.chatHeight = panel.offsetHeight;
                     panel.style.height = '32px';
-                    panel.style.flex = 'none';
                     icon.classList.remove('fa-chevron-down');
                     icon.classList.add('fa-chevron-up');
                 } else {
-                    panel.style.height = this.chatHeight + 'px';
-                    panel.style.flex = 'none';
+                    panel.style.height = '220px';
                     icon.classList.remove('fa-chevron-up');
                     icon.classList.add('fa-chevron-down');
-                    setTimeout(() => this.handleResize(), 300);
                 }
             },
 
@@ -1112,16 +1044,15 @@
                         this.showToast('Connected to GitHub!');
                         this.loadGitHubRepo();
                     } else {
-                        alert('Invalid token or unable to connect');
+                        alert('Invalid token');
                     }
                 } catch (error) {
-                    alert('Error connecting to GitHub: ' + error.message);
+                    alert('Error: ' + error.message);
                 }
             },
 
             async loadGitHubRepo() {
                 if (!this.github.connected) return;
-                
                 try {
                     const [owner, repo] = this.github.repo.split('/');
                     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, {
@@ -1129,8 +1060,8 @@
                     });
                     
                     const data = await response.json();
-                    
                     this.files = {};
+                    
                     for (const item of data) {
                         if (item.type === 'file') {
                             const contentResponse = await fetch(item.download_url);
@@ -1148,7 +1079,6 @@
                     else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
                     
                 } catch (error) {
-                    console.error('Error loading repo:', error);
                     this.showToast('Error loading repository');
                 }
             },
@@ -1185,10 +1115,7 @@
                         
                         const putResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
                             method: 'PUT',
-                            headers: {
-                                'Authorization': `token ${this.github.token}`,
-                                'Content-Type': 'application/json'
-                            },
+                            headers: { 'Authorization': `token ${this.github.token}`, 'Content-Type': 'application/json' },
                             body: JSON.stringify(body)
                         });
                         
@@ -1207,13 +1134,11 @@
 
             updateAISettings() {
                 const provider = document.getElementById('ai-provider').value;
-                const config = this.providers[provider];
-                
                 document.getElementById('local-endpoint-container').classList.toggle('hidden', provider !== 'local');
                 
                 const modelInput = document.getElementById('ai-model');
-                if (!modelInput.value || modelInput.value === this.providers[this.ai.provider]?.model) {
-                    modelInput.value = config.model;
+                if (!modelInput.value) {
+                    modelInput.value = this.providers[provider].model;
                 }
                 
                 this.ai = {
@@ -1234,28 +1159,8 @@
                 this.saveToStorage();
             },
 
-            updateFontSize() {
-                const size = parseInt(document.getElementById('font-size').value);
-                this.settings.fontSize = size;
-                this.editor.updateOptions({ fontSize: size });
-                this.saveToStorage();
-            },
-
-            toggleWordWrap() {
-                const wrap = document.getElementById('word-wrap').checked;
-                this.settings.wordWrap = wrap;
-                this.editor.updateOptions({ wordWrap: wrap ? 'on' : 'off' });
-                this.saveToStorage();
-            },
-
             saveToStorage() {
-                const data = {
-                    files: this.files,
-                    versions: this.versions,
-                    github: this.github,
-                    ai: this.ai,
-                    settings: this.settings
-                };
+                const data = { files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings };
                 localStorage.setItem('devstudio_data', JSON.stringify(data));
             },
 
@@ -1269,10 +1174,8 @@
                     this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' };
                     this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
                 } else {
-                    // Initialize with demo files
                     this.files = {
-                        'index.html': {
-                            content: `<!DOCTYPE html>
+                        'index.html': { content: `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1306,28 +1209,15 @@
         <h2>Getting Started</h2>
         <ul>
             <li>Edit files in the left sidebar</li>
-            <li>Use the AI chat for help (supports OpenAI, Claude, Gemini, Deepseek)</li>
+            <li>Use the AI chat for help</li>
             <li>Save checkpoints to track changes</li>
             <li>Connect GitHub to sync</li>
         </ul>
     </div>
 </body>
-</html>`,
-                            type: 'file'
-                        },
-                        'style.css': {
-                            content: `/* Add your styles here */
-body {
-    margin: 0;
-    padding: 0;
-}`,
-                            type: 'file'
-                        },
-                        'script.js': {
-                            content: `// Add your JavaScript here
-console.log('Hello from DevStudio!');`,
-                            type: 'file'
-                        }
+</html>`, type: 'file' },
+                        'style.css': { content: `/* Add your styles here */\nbody {\n    margin: 0;\n    padding: 0;\n}`, type: 'file' },
+                        'script.js': { content: `// Add your JavaScript here\nconsole.log('Hello from DevStudio!');`, type: 'file' }
                     };
                     this.createCheckpoint();
                 }
@@ -1340,7 +1230,6 @@ console.log('Hello from DevStudio!');`,
                         content += `=== ${name} ===\n${data.content}\n\n`;
                     }
                 }
-                
                 const blob = new Blob([content], { type: 'text/plain' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1363,76 +1252,19 @@ console.log('Hello from DevStudio!');`,
 
             showToast(message) {
                 const toast = document.createElement('div');
-                toast.className = 'fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg border border-gray-700 slide-in z-50';
+                toast.className = 'toast';
                 toast.textContent = message;
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 3000);
             },
 
-            setupResizer() {
-                const resizer = document.getElementById('resizer');
-                const left = resizer.previousElementSibling; // Editor area
-                const right = resizer.nextElementSibling; // Preview panel
-                const sidebar = document.querySelector('.sidebar');
-                
-                let x = 0;
-                let leftWidth = 0;
-                
-                const mouseDownHandler = function(e) {
-                    x = e.clientX;
-                    const containerWidth = resizer.parentNode.getBoundingClientRect().width;
-                    const sidebarWidth = sidebar.offsetWidth;
-                    leftWidth = left.getBoundingClientRect().width;
-                    
-                    document.addEventListener('mousemove', mouseMoveHandler);
-                    document.addEventListener('mouseup', mouseUpHandler);
-                    resizer.classList.add('bg-blue-500');
-                    document.body.style.cursor = 'col-resize';
-                    document.body.style.userSelect = 'none';
-                };
-                
-                const mouseMoveHandler = function(e) {
-                    const dx = e.clientX - x;
-                    const newLeftWidth = leftWidth + dx;
-                    const containerWidth = resizer.parentNode.getBoundingClientRect().width;
-                    const sidebarWidth = sidebar.offsetWidth;
-                    
-                    // Calculate percentages
-                    const availableWidth = containerWidth - sidebarWidth - 6; // 6px for resizer
-                    const leftPercent = (newLeftWidth / availableWidth) * 100;
-                    
-                    if (leftPercent > 20 && leftPercent < 80) {
-                        left.style.width = leftPercent + '%';
-                        right.style.width = (100 - leftPercent) + '%';
-                    }
-                };
-                
-                const mouseUpHandler = function() {
-                    document.removeEventListener('mousemove', mouseMoveHandler);
-                    document.removeEventListener('mouseup', mouseUpHandler);
-                    resizer.classList.remove('bg-blue-500');
-                    document.body.style.cursor = '';
-                    document.body.style.userSelect = '';
-                    
-                    // Trigger editor resize
-                    if (app.editor) {
-                        app.editor.layout();
-                    }
-                };
-                
-                resizer.addEventListener('mousedown', mouseDownHandler);
-            },
-
             setupAutoSave() {
                 setInterval(() => {
-                    if (this.currentFile) {
-                        this.saveToStorage();
-                    }
+                    if (this.currentFile) this.saveToStorage();
                 }, 30000);
             }
         };
 
-        // Initialize on load
         window.addEventListener('DOMContentLoaded', () => app.init());
     </script>
 </body>
