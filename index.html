@@ -394,6 +394,7 @@
         </div>
     </div>
 
+    <!-- MODIFIED: Settings Modal with Dynamic Model Dropdown -->
     <div id="settings-modal" class="modal hidden">
         <div class="modal-box">
             <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #f8fafc;">Settings</h2>
@@ -408,7 +409,8 @@
             
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">AI Provider</label>
-                <select id="ai-provider" class="input" onchange="app.updateProviderHelp()">
+                <!-- MODIFIED: Added onchange handler to update models -->
+                <select id="ai-provider" class="input" onchange="app.handleProviderChange()">
                     <option value="openai">OpenAI (GPT-4) - Recommended</option>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="google">Google (Gemini)</option>
@@ -425,9 +427,13 @@
                 <p style="font-size: 11px; color: #64748b; margin-top: 4px;" id="api-key-hint">Enter your API key</p>
             </div>
             
+            <!-- NEW: Dynamic Model Dropdown -->
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">Model</label>
-                <input type="text" id="ai-model" class="input" placeholder="gpt-4, claude-3-opus, etc.">
+                <select id="ai-model" class="input">
+                    <!-- Options populated by JavaScript -->
+                </select>
+                <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Select model for the chosen provider</p>
             </div>
             
             <div id="local-endpoint-container" class="mb-4" style="display: none;">
@@ -492,15 +498,58 @@
             settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
             chatCollapsed: false, chatHeight: 220,
             expandedFolders: new Set(['']),
-            currentFolder: '', // Track currently selected folder
+            currentFolder: '',
             
+            // NEW: Provider configurations with available models
             providers: {
-                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', help: 'Most reliable. Get key from platform.openai.com', cors: false },
-                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', help: 'Get key from console.anthropic.com', cors: false },
-                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', help: 'Get key from makersuite.google.com', cors: false },
-                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', help: 'Paid API. Get key from platform.deepseek.com', cors: true },
-                kimi: { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1/chat/completions', model: 'kimi-k2', help: 'FREE tier but CORS blocked! Use with proxy or extension.', cors: true },
-                local: { name: 'Local', baseUrl: '', model: 'local-model', help: 'Ollama, LM Studio, etc. No CORS issues!', cors: false }
+                openai: { 
+                    name: 'OpenAI', 
+                    baseUrl: 'https://api.openai.com/v1/chat/completions', 
+                    models: ['gpt-4', 'gpt-4-turbo-preview', 'gpt-3.5-turbo'],
+                    defaultModel: 'gpt-4',
+                    help: 'Most reliable. Get key from platform.openai.com', 
+                    cors: false 
+                },
+                anthropic: { 
+                    name: 'Anthropic', 
+                    baseUrl: 'https://api.anthropic.com/v1/messages', 
+                    models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+                    defaultModel: 'claude-3-opus-20240229',
+                    help: 'Get key from console.anthropic.com', 
+                    cors: false 
+                },
+                google: { 
+                    name: 'Google', 
+                    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', 
+                    models: ['gemini-pro', 'gemini-1.5-pro-latest'],
+                    defaultModel: 'gemini-pro',
+                    help: 'Get key from makersuite.google.com', 
+                    cors: false 
+                },
+                deepseek: { 
+                    name: 'Deepseek', 
+                    baseUrl: 'https://api.deepseek.com/chat/completions', 
+                    models: ['deepseek-chat', 'deepseek-coder'],
+                    defaultModel: 'deepseek-chat',
+                    help: 'Paid API. Get key from platform.deepseek.com', 
+                    cors: true 
+                },
+                kimi: { 
+                    name: 'Kimi', 
+                    baseUrl: 'https://api.moonshot.cn/v1/chat/completions', 
+                    models: ['kimi-k2', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+                    defaultModel: 'kimi-k2',
+                    help: 'FREE tier but CORS blocked! Use with proxy or extension.', 
+                    cors: true 
+                },
+                local: { 
+                    name: 'Local', 
+                    baseUrl: '', 
+                    models: ['llama2', 'codellama', 'mistral', 'custom'],
+                    defaultModel: 'codellama',
+                    help: 'Ollama, LM Studio, etc. No CORS issues!', 
+                    cors: false 
+                }
             },
 
             init() {
@@ -514,16 +563,19 @@
                 this.setupChatResize();
                 this.setupColumnResizers();
                 
+                // Initialize settings form
                 document.getElementById('ai-provider').value = this.ai.provider;
                 document.getElementById('ai-api-key').value = this.ai.apiKey;
-                document.getElementById('ai-model').value = this.ai.model;
                 document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                // NEW: Initialize model dropdown
+                this.handleProviderChange();
+                document.getElementById('ai-model').value = this.ai.model;
                 
                 if (this.github.connected) {
                     document.getElementById('github-status').textContent = this.github.repo;
                 }
                 
-                // Show CORS warning for problematic providers
                 this.updateProviderHelp();
             },
 
@@ -623,28 +675,22 @@
                 });
             },
 
-            // Update folder selector dropdown with all folders
             updateFolderSelector() {
                 const select = document.getElementById('folder-select');
                 if (!select) return;
                 
-                // Keep the root option
                 select.innerHTML = '<option value="">📁 Root</option>';
                 
-                // Get all unique folders from files
                 const folders = new Set();
                 
                 Object.keys(this.files).forEach(path => {
-                    // Add explicit folder entries
                     if (this.files[path].type === 'folder') {
                         folders.add(path);
                     }
                     
-                    // Also extract ALL parent folders from file paths (for old data compatibility)
                     if (path.includes('/')) {
                         const parts = path.split('/');
                         let currentPath = '';
-                        // Build up folder paths from each part except the last (filename)
                         for (let i = 0; i < parts.length - 1; i++) {
                             if (parts[i]) {
                                 currentPath += parts[i] + '/';
@@ -654,11 +700,9 @@
                     }
                 });
                 
-                // Remove root if it was added
                 folders.delete('');
                 folders.delete('/');
                 
-                // Sort folders by depth then alphabetically
                 const sortedFolders = Array.from(folders).sort((a, b) => {
                     const depthA = a.split('/').filter(p => p).length;
                     const depthB = b.split('/').filter(p => p).length;
@@ -666,10 +710,9 @@
                     return a.localeCompare(b);
                 });
                 
-                // Add folders to dropdown with indentation
                 sortedFolders.forEach(folder => {
                     const depth = folder.split('/').filter(p => p).length;
-                    const indent = '\u00A0\u00A0'.repeat(depth); // Non-breaking spaces
+                    const indent = '\u00A0\u00A0'.repeat(depth);
                     const folderName = folder.split('/').filter(p => p).pop() || folder;
                     const option = document.createElement('option');
                     option.value = folder;
@@ -679,11 +722,34 @@
                 });
             },
 
-            // Change current folder view
             changeFolder(folder) {
                 this.currentFolder = folder;
                 this.saveToStorage();
                 this.renderFileTree();
+            },
+
+            // NEW: Handle provider change - update model dropdown
+            handleProviderChange() {
+                const provider = document.getElementById('ai-provider').value;
+                const modelSelect = document.getElementById('ai-model');
+                const config = this.providers[provider];
+                
+                // Clear existing options
+                modelSelect.innerHTML = '';
+                
+                // Add new options based on provider
+                config.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    modelSelect.appendChild(option);
+                });
+                
+                // Set default model for this provider
+                modelSelect.value = config.defaultModel;
+                
+                // Update help text and warnings
+                this.updateProviderHelp();
             },
 
             saveAISettings() {
@@ -691,7 +757,7 @@
                 this.ai = {
                     provider: provider,
                     apiKey: document.getElementById('ai-api-key').value.trim(),
-                    model: document.getElementById('ai-model').value.trim() || this.providers[provider].model,
+                    model: document.getElementById('ai-model').value.trim(),
                     endpoint: document.getElementById('ai-endpoint').value.trim()
                 };
                 this.saveToStorage();
@@ -711,7 +777,6 @@
                 document.getElementById('provider-help').textContent = config.help;
                 document.getElementById('local-endpoint-container').style.display = provider === 'local' ? 'block' : 'none';
                 
-                // Show CORS warning for problematic providers
                 const corsWarning = document.getElementById('cors-warning');
                 if (config.cors) {
                     corsWarning.style.display = 'block';
@@ -733,11 +798,6 @@
                     hint.textContent = 'Enter your API key for the selected provider';
                     hint.style.color = '#64748b';
                 }
-                
-                const modelInput = document.getElementById('ai-model');
-                if (!modelInput.value) {
-                    modelInput.value = config.model;
-                }
             },
 
             updateProviderUI() {
@@ -754,12 +814,10 @@
                 }
             },
 
-            // Fixed file tree rendering - shows files in current folder
             renderFileTree() {
                 const container = document.getElementById('file-tree');
                 container.innerHTML = '';
                 
-                // First, collect all explicit folders and implied folders from file paths
                 const allFolders = new Set();
                 const allFiles = [];
                 
@@ -769,7 +827,6 @@
                         allFolders.add(path);
                     } else {
                         allFiles.push({ path, ...fileData });
-                        // Extract parent folders from file path
                         if (path.includes('/')) {
                             const parts = path.split('/');
                             let currentPath = '';
@@ -783,20 +840,16 @@
                     }
                 });
                 
-                // Get items to show in current folder
                 const items = [];
                 const addedFolders = new Set();
                 
-                // Add folders that are direct children of current folder
                 allFolders.forEach(folderPath => {
                     if (this.currentFolder === '') {
-                        // Root level - folder has no '/' before its name
                         if (!folderPath.slice(0, -1).includes('/')) {
                             items.push({ path: folderPath, type: 'folder' });
                             addedFolders.add(folderPath);
                         }
                     } else {
-                        // In subfolder - folder starts with current folder and has one more level
                         if (folderPath.startsWith(this.currentFolder)) {
                             const remaining = folderPath.slice(this.currentFolder.length);
                             const slashCount = (remaining.match(/\//g) || []).length;
@@ -808,15 +861,12 @@
                     }
                 });
                 
-                // Add files that are in current folder
                 allFiles.forEach(file => {
                     if (this.currentFolder === '') {
-                        // Root level - file has no '/'
                         if (!file.path.includes('/')) {
                             items.push(file);
                         }
                     } else {
-                        // In subfolder - file starts with current folder and has no more '/'
                         if (file.path.startsWith(this.currentFolder)) {
                             const remaining = file.path.slice(this.currentFolder.length);
                             if (remaining && !remaining.includes('/')) {
@@ -826,7 +876,6 @@
                     }
                 });
                 
-                // Sort: folders first, then files alphabetically
                 items.sort((a, b) => {
                     const aIsFolder = a.type === 'folder';
                     const bIsFolder = b.type === 'folder';
@@ -835,7 +884,6 @@
                     return a.path.localeCompare(b.path);
                 });
                 
-                // Render items
                 items.forEach(item => {
                     const div = document.createElement('div');
                     div.className = `tree-item ${this.currentFile === item.path ? 'active' : ''}`;
@@ -865,7 +913,6 @@
                     if (isFolder) {
                         div.onclick = (e) => {
                             e.stopPropagation();
-                            // Navigate into folder
                             this.changeFolder(item.path);
                         };
                     } else {
@@ -875,7 +922,6 @@
                     container.appendChild(div);
                 });
                 
-                // Show "Go to parent" option if not in root
                 if (this.currentFolder !== '') {
                     const parentDiv = document.createElement('div');
                     parentDiv.className = 'tree-item';
@@ -891,7 +937,6 @@
 
             createFile() {
                 document.getElementById('new-file-modal').classList.remove('hidden');
-                // Pre-fill with current folder path
                 document.getElementById('new-file-path').value = this.currentFolder;
                 document.getElementById('new-file-name').focus();
             },
@@ -902,7 +947,6 @@
                 const fullPath = path ? (path.endsWith('/') ? path + name : path + '/' + name) : name;
                 
                 if (name && !this.files[fullPath]) {
-                    // Create parent folders
                     if (path) {
                         const parts = path.split('/').filter(p => p);
                         let currentPath = '';
@@ -1052,7 +1096,6 @@
                         this.addChatMessage('Click <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer;">Apply Changes</button> to update the file.', 'ai');
                     }
                 } catch (error) {
-                    // Better error message for CORS issues
                     let errorMsg = error.message;
                     if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
                         const provider = this.providers[this.ai.provider];
@@ -1082,7 +1125,7 @@
                     url = config.baseUrl;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
                     body = JSON.stringify({
-                        model: model || config.model,
+                        model: model || config.defaultModel,
                         messages: [
                             { role: 'system', content: 'You are a helpful coding assistant.' },
                             { role: 'user', content: context }
@@ -1093,9 +1136,9 @@
                 } else if (provider === 'anthropic') {
                     url = config.baseUrl;
                     headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-                    body = JSON.stringify({ model: model || config.model, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
+                    body = JSON.stringify({ model: model || config.defaultModel, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
                 } else if (provider === 'google') {
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/${model || config.model}:generateContent?key=${apiKey}`;
+                    url = `https://generativelanguage.googleapis.com/v1beta/models/${model || config.defaultModel}:generateContent?key=${apiKey}`;
                     headers = { 'Content-Type': 'application/json' };
                     body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
                 } else {
@@ -1194,10 +1237,7 @@
                 try {
                     const [owner, repo] = this.github.repo.split('/');
                     this.files = {};
-                    
-                    // Recursively fetch all files from the repository
                     await this.fetchGitHubContents(owner, repo, '');
-                    
                     this.currentFolder = '';
                     this.saveToStorage();
                     this.updateFolderSelector();
@@ -1224,14 +1264,11 @@
                 
                 for (const item of data) {
                     if (item.type === 'file') {
-                        // Fetch file content
                         const contentResponse = await fetch(item.download_url);
                         const content = await contentResponse.text();
                         this.files[item.path] = { content, type: 'file' };
                     } else if (item.type === 'dir') {
-                        // Create folder entry
                         this.files[item.path + '/'] = { content: null, type: 'folder' };
-                        // Recursively fetch contents
                         await this.fetchGitHubContents(owner, repo, item.path);
                     }
                 }
@@ -1329,7 +1366,6 @@
                     this.expandedFolders = new Set(parsed.expandedFolders || ['']);
                     this.currentFolder = parsed.currentFolder || '';
                 } else {
-                    // Demo data with nested structure
                     this.files = {
                         'index.html': { content: `<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }\nh1 { font-size: 3rem; }\n.card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }\n</style>\n</head>\n<body>\n<h1>Welcome to DevStudio</h1>\n<div class="card">\n<h2>Getting Started</h2>\n<ul>\n<li>Edit files in the left sidebar</li>\n<li>Use the folder dropdown to navigate</li>\n<li>Click ".. (parent)" to go back</li>\n<li>Drag borders to resize panels</li>\n</ul>\n</div>\n</body>\n</html>`, type: 'file' },
                         'about.html': { content: '<!DOCTYPE html><html><body><h1>About Page</h1></body></html>', type: 'file' },
