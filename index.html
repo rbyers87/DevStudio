@@ -1,3 +1,9 @@
+I need to create a new chat to pickup where I left off. Here is my original prompt:
+
+Lovable.dev creates an environment where I can load a GitHub project, make changes to the code, and see my website live. It also has a feature where I can revert back to a previous version in the event I messed up my code with recent changes. I want to replicate this into my own project so I don’t have to use lovable.dev. Can you create this for me? I want ability to link to my GitHub so I can start a new project and it auto syncs. I also want to have an ai chat that can take my direction to update code. I need ability to add my own ai api keys
+
+Here is my current index.html file:
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1168,3 +1174,588 @@
     </script>
 </body>
 </html>
+
+latest issue:
+
+I've tried to use kimi free tier but get this console error: DevStudio/:879 AI Error: TypeError: Failed to fetch at Object.callAI (DevStudio/:920:40) at Object.sendMessage (DevStudio/:872:49) at HTMLInputElement.onkeypress (DevStudio/:306:196) sendMessage @ DevStudio/:879
+
+also, I still can't find how to access files in other folders in the explorer section other than the files in the root folder. should there be a folder selector?
+
+The start of your response:
+
+I'll fix both issues. The Kimi API fetch is failing likely due to CORS restrictions (browser blocking cross-origin requests). For the file explorer, I'll add a folder selector dropdown and fix the tree rendering to properly show all folders.
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevStudio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { 
+            font-family: 'Inter', sans-serif; 
+            background: #0f172a !important; 
+            color: #e2e8f0 !important; 
+            overflow: hidden; 
+            height: 100%; 
+            width: 100%; 
+        }
+        
+        .app-grid {
+            display: grid;
+            grid-template-rows: 56px 1fr;
+            grid-template-columns: 260px 1fr 350px;
+            grid-template-areas: "header header header" "sidebar editor preview";
+            height: 100vh;
+            width: 100vw;
+            background: #0f172a;
+        }
+        
+        .col-resizer {
+            width: 6px;
+            background: transparent;
+            cursor: col-resize;
+            position: relative;
+            z-index: 20;
+        }
+        
+        .col-resizer:hover, .col-resizer.resizing {
+            background: #3b82f6;
+        }
+        
+        .col-resizer::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background: #475569;
+            border-radius: 1px;
+        }
+        
+        .header { grid-area: header; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+        
+        .sidebar-container {
+            grid-area: sidebar;
+            display: flex;
+            position: relative;
+        }
+        
+        .sidebar {
+            flex: 1;
+            background: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 150px;
+        }
+        
+        .sidebar-top { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 8px; 
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sidebar-bottom { height: 200px; border-top: 1px solid #334155; overflow-y: auto; padding: 8px; }
+        
+        /* Folder Selector */
+        .folder-selector {
+            padding: 8px;
+            border-bottom: 1px solid #334155;
+            margin-bottom: 8px;
+        }
+        
+        .folder-selector label {
+            font-size: 11px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+            display: block;
+        }
+        
+        .folder-selector select {
+            width: 100%;
+            padding: 6px 8px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 4px;
+            color: #e2e8f0;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        
+        .folder-selector select:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        .editor-section { grid-area: editor; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; min-width: 0; }
+        .tabs-bar { height: 36px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; overflow-x: auto; }
+        .tab { height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-right: 1px solid #334155; cursor: pointer; font-size: 13px; background: #1e293b; color: #94a3b8; white-space: nowrap; }
+        .tab.active { background: #334155; color: #f8fafc; border-top: 2px solid #3b82f6; }
+        .tab .preview-btn { 
+            margin-left: 4px; 
+            padding: 2px 4px; 
+            background: #10b981; 
+            color: white; 
+            border-radius: 3px; 
+            font-size: 9px; 
+            border: none; 
+            cursor: pointer;
+            display: none;
+        }
+        .tab:hover .preview-btn, .tab.active .preview-btn { display: inline-block; }
+        .editor-container { flex: 1; position: relative; overflow: hidden; min-height: 0; background: #0f172a; }
+        #monaco-editor { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+        
+        .chat-panel {
+            height: 220px;
+            min-height: 32px;
+            max-height: 60vh;
+            border-top: 1px solid #334155;
+            background: #1e293b;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .chat-resizer { height: 6px; background: transparent; cursor: ns-resize; position: absolute; top: -3px; left: 0; right: 0; z-index: 10; }
+        .chat-resizer:hover { background: #3b82f6; opacity: 0.5; }
+        .chat-header { height: 32px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; cursor: pointer; background: #252f47; user-select: none; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 12px; }
+        .chat-input-area { padding: 12px; border-top: 1px solid #334155; }
+        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
+        .chat-bubble.user { background: #3b82f6; color: white; margin-left: auto; }
+        .chat-bubble.ai { background: #334155; color: #e2e8f0; }
+        
+        .preview-container {
+            grid-area: preview;
+            display: flex;
+            position: relative;
+        }
+        
+        .preview-section {
+            flex: 1;
+            background: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 200px;
+        }
+        
+        .preview-header { height: 36px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; background: #1e293b; }
+        .preview-content { flex: 1; position: relative; background: white; overflow: hidden; }
+        #preview-frame { width: 100%; height: 100%; border: none; display: block; }
+        
+        /* File Tree Styles - SIMPLIFIED */
+        .file-tree { 
+            font-size: 13px; 
+            user-select: none;
+            flex: 1;
+            overflow-y: auto;
+        }
+        
+        .tree-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 1px;
+            color: #cbd5e1;
+        }
+        
+        .tree-item:hover {
+            background: #334155;
+        }
+        
+        .tree-item.active {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .tree-item .chevron {
+            width: 16px;
+            text-align: center;
+            font-size: 10px;
+            transition: transform 0.2s;
+            color: #94a3b8;
+            cursor: pointer;
+        }
+        
+        .tree-item .chevron.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .tree-item .icon {
+            width: 16px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .tree-item .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .tree-children {
+            margin-left: 16px;
+            border-left: 1px solid #334155;
+        }
+        
+        .tree-children.collapsed {
+            display: none;
+        }
+        
+        .version-item { display: flex; gap: 8px; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
+        .version-item:hover { background: #334155; }
+        .version-dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; margin-top: 4px; flex-shrink: 0; }
+        .version-dot.active { background: #10b981; }
+        .version-line { width: 2px; background: #475569; margin-left: 4px; flex-grow: 1; min-height: 20px; }
+        
+        .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+        .modal.hidden { display: none !important; }
+        .modal-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 24px; color: #e2e8f0; }
+        
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #334155; color: #e2e8f0; }
+        .btn-secondary:hover { background: #475569; }
+        
+        .input { width: 100%; padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 14px; margin-top: 4px; }
+        .input:focus { outline: none; border-color: #3b82f6; }
+        
+        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .flex { display: flex; } .items-center { align-items: center; } .justify-between { justify-content: space-between; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
+        .text-xs { font-size: 12px; } .text-sm { font-size: 14px; } .font-semibold { font-weight: 600; }
+        .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; } .mt-2 { margin-top: 8px; } .mt-4 { margin-top: 16px; }
+        
+        .provider-badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
+        .badge-openai { background: #10a37f; color: white; } 
+        .badge-anthropic { background: #d4a574; color: #1a1a1a; }
+        .badge-google { background: #4285f4; color: white; } 
+        .badge-deepseek { background: #4f46e5; color: white; }
+        .badge-kimi { background: #f97316; color: white; }
+        .badge-local { background: #64748b; color: white; }
+        
+        .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #64748b; background: #0f172a; }
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; border: 1px solid #334155; padding: 12px 20px; border-radius: 8px; color: #e2e8f0; z-index: 200; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; } 
+        ::-webkit-scrollbar-track { background: transparent; } 
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        .resizing { user-select: none; }
+        .resizing iframe { pointer-events: none; }
+        
+        /* CORS Warning */
+        .cors-warning {
+            background: #451a03;
+            border: 1px solid #92400e;
+            color: #fbbf24;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="app-grid">
+        <header class="header">
+            <div class="flex items-center gap-3">
+                <div style="width: 32px; height: 32px; background: #3b82f6; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                    <i class="fas fa-code" style="color: white; font-size: 14px;"></i>
+                </div>
+                <h1 style="font-size: 18px; font-weight: 600; color: #f8fafc;">DevStudio</h1>
+                <span style="font-size: 12px; background: #334155; padding: 2px 8px; border-radius: 4px; color: #94a3b8;">v1.0</span>
+                <span id="active-provider" class="provider-badge badge-openai" style="display: none;">OpenAI</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="app.toggleSettings()" style="padding: 8px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 6px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'"><i class="fas fa-cog"></i></button>
+                <button onclick="app.showGitHubModal()" style="padding: 6px 12px; background: #334155; color: #e2e8f0; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fab fa-github"></i><span id="github-status" class="truncate" style="max-width: 120px;">Connect GitHub</span>
+                </button>
+                <button onclick="app.deployToGitHub()" style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 8px;"><i class="fas fa-cloud-upload-alt"></i>Sync</button>
+            </div>
+        </header>
+
+        <div class="sidebar-container" id="sidebar-container">
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-top">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Explorer</span>
+                        <div style="display: flex; gap: 4px;">
+                            <button onclick="app.createFile()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New File"><i class="fas fa-file-medical" style="font-size: 12px;"></i></button>
+                            <button onclick="app.createFolder()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New Folder"><i class="fas fa-folder-plus" style="font-size: 12px;"></i></button>
+                        </div>
+                    </div>
+                    
+                    <!-- Folder Selector Dropdown -->
+                    <div class="folder-selector">
+                        <label>Current Folder</label>
+                        <select id="folder-select" onchange="app.changeFolder(this.value)">
+                            <option value="">📁 Root</option>
+                        </select>
+                    </div>
+                    
+                    <div id="file-tree" class="file-tree"></div>
+                </div>
+                <div class="sidebar-bottom">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px; border-bottom: 1px solid #334155;">
+                        <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">History</span>
+                        <button onclick="app.createCheckpoint()" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class="fas fa-save" style="margin-right: 4px;"></i>Save</button>
+                    </div>
+                    <div id="version-list"></div>
+                </div>
+            </aside>
+            <div class="col-resizer" id="sidebar-resizer" title="Drag to resize sidebar"></div>
+        </div>
+
+        <section class="editor-section">
+            <div class="tabs-bar" id="tabs-container"></div>
+            <div class="editor-container">
+                <div id="monaco-editor"></div>
+                <div id="empty-state" class="empty-state" style="display: none;">
+                    <div style="text-align: center;">
+                        <i class="fas fa-code" style="font-size: 48px; margin-bottom: 12px; opacity: 0.5;"></i>
+                        <p>Select a file to start editing</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-panel" id="chat-panel">
+                <div class="chat-resizer" id="chat-resizer" title="Drag to resize"></div>
+                <div class="chat-header" onclick="app.toggleChat()">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-robot" style="color: #60a5fa; font-size: 12px;"></i>
+                        <span style="font-size: 12px; font-weight: 600; color: #e2e8f0;">AI Assistant</span>
+                        <span id="ai-status" style="font-size: 10px; background: #334155; padding: 2px 6px; border-radius: 4px; color: #94a3b8;">Ready</span>
+                    </div>
+                    <i id="chat-toggle-icon" class="fas fa-chevron-down" style="color: #64748b; font-size: 12px;"></i>
+                </div>
+                <div class="chat-messages" id="chat-messages">
+                    <div class="chat-bubble ai">Hello! I'm your AI coding assistant. I can help you write code, debug issues, or explain concepts. What would you like to work on?</div>
+                </div>
+                <div class="chat-input-area">
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" id="chat-input" class="input" placeholder="Ask me to modify code..." onkeypress="if(event.key==='Enter') app.sendMessage()">
+                        <button onclick="app.sendMessage()" class="btn btn-primary"><i class="fas fa-paper-plane" style="font-size: 12px;"></i></button>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="app.quickAction('explain')" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Explain</button>
+                        <button onclick="app.quickAction('fix')" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Fix Bugs</button>
+                        <button onclick="app.quickAction('optimize')" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Optimize</button>
+                        <button onclick="app.quickAction('document')" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Add Docs</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="preview-container" id="preview-container">
+            <div class="col-resizer" id="preview-resizer" title="Drag to resize preview" style="margin-left: -6px;"></div>
+            <section class="preview-section" id="preview-section">
+                <div class="preview-header">
+                    <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Live Preview</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="app.refreshPreview()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Refresh"><i class="fas fa-sync-alt" style="font-size: 12px;"></i></button>
+                        <button onclick="app.openPreviewInNewTab()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Open in New Tab"><i class="fas fa-external-link-alt" style="font-size: 12px;"></i></button>
+                    </div>
+                </div>
+                <div class="preview-content"><iframe id="preview-frame"></iframe></div>
+            </section>
+        </div>
+    </div>
+
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #f8fafc;">Settings</h2>
+            
+            <!-- CORS Warning -->
+            <div class="cors-warning" id="cors-warning" style="display: none;">
+                <strong>⚠️ CORS Issue:</strong> Some AI providers (like Kimi) block browser requests. 
+                You may need to use a browser extension to bypass CORS, or use a backend proxy.
+                <br><br>
+                <strong>Recommended:</strong> Use OpenAI or run this app locally with a proxy server.
+            </div>
+            
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">AI Provider</label>
+                <select id="ai-provider" class="input" onchange="app.updateProviderHelp()">
+                    <option value="openai">OpenAI (GPT-4) - Recommended</option>
+                    <option value="anthropic">Anthropic (Claude)</option>
+                    <option value="google">Google (Gemini)</option>
+                    <option value="deepseek">Deepseek (V3/R1) - Paid</option>
+                    <option value="kimi">Kimi (Moonshot) - CORS Issues</option>
+                    <option value="local">Local/Custom (Ollama, etc.)</option>
+                </select>
+                <p style="font-size: 12px; color: #64748b; margin-top: 4px;" id="provider-help">Get your key from platform.openai.com</p>
+            </div>
+            
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">API Key</label>
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+                <p style="font-size: 11px; color: #64748b; margin-top: 4px;" id="api-key-hint">Enter your API key</p>
+            </div>
+            
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">Model</label>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, claude-3-opus, etc.">
+            </div>
+            
+            <div id="local-endpoint-container" class="mb-4" style="display: none;">
+                <label style="font-size: 14px; color: #94a3b8;">Custom Endpoint</label>
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
+            </div>
+            
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">Editor Theme</label>
+                <select id="editor-theme" class="input" onchange="app.updateEditorTheme()">
+                    <option value="vs-dark">Dark</option>
+                    <option value="vs">Light</option>
+                    <option value="hc-black">High Contrast</option>
+                </select>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button onclick="app.exportProject()" class="btn btn-secondary" style="flex: 1;"><i class="fas fa-download" style="margin-right: 8px;"></i>Export</button>
+                <button onclick="app.clearAllData()" class="btn btn-secondary" style="flex: 1; color: #f87171;"><i class="fas fa-trash" style="margin-right: 8px;"></i>Clear Data</button>
+            </div>
+            
+            <button onclick="app.saveSettingsAndClose()" class="btn btn-primary" style="width: 100%; margin-top: 16px;">Save & Close</button>
+        </div>
+    </div>
+
+    <div id="github-modal" class="modal hidden">
+        <div class="modal-box">
+            <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #f8fafc;"><i class="fab fa-github"></i>Connect to GitHub</h2>
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">Personal Access Token</label>
+                <input type="password" id="github-token" class="input" placeholder="ghp_...">
+                <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Create at GitHub Settings > Developer settings > Personal access tokens</p>
+            </div>
+            <div class="mb-4">
+                <label style="font-size: 14px; color: #94a3b8;">Repository (owner/repo)</label>
+                <input type="text" id="github-repo" class="input" placeholder="username/my-project">
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 16px;">
+                <button onclick="app.connectGitHub()" class="btn btn-primary" style="flex: 1;">Connect</button>
+                <button onclick="app.closeModal('github-modal')" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="new-file-modal" class="modal hidden">
+        <div class="modal-box" style="max-width: 320px;">
+            <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #f8fafc;">Create New File</h3>
+            <input type="text" id="new-file-path" class="input" style="margin-bottom: 8px;" placeholder="folder/subfolder/ (optional)">
+            <input type="text" id="new-file-name" class="input" style="margin-bottom: 16px;" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
+            <div style="display: flex; gap: 8px;">
+                <button onclick="app.confirmCreateFile()" class="btn btn-primary" style="flex: 1;">Create</button>
+                <button onclick="app.closeModal('new-file-modal')" class="btn btn-secondary" style="flex: 1;">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const app = {
+            editor: null, currentFile: null, files: {}, versions: [],
+            github: { token: null, repo: null, connected: false },
+            ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
+            settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
+            chatCollapsed: false, chatHeight: 220,
+            expandedFolders: new Set(['']),
+            currentFolder: '', // Track currently selected folder
+            
+            providers: {
+                openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', help: 'Most reliable. Get key from platform.openai.com', cors: false },
+                anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', help: 'Get key from console.anthropic.com', cors: false },
+                google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', help: 'Get key from makersuite.google.com', cors: false },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', help: 'Paid API. Get key from platform.deepseek.com', cors: true },
+                kimi: { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1/chat/completions', model: 'kimi-k2', help: 'FREE tier but CORS blocked! Use with proxy or extension.', cors: true },
+                local: { name: 'Local', baseUrl: '', model: 'local-model', help: 'Ollama, LM Studio, etc. No CORS issues!', cors: false }
+            },
+
+            init() {
+                this.loadFromStorage();
+                this.initMonaco();
+                this.updateFolderSelector();
+                this.renderFileTree();
+                this.renderVersions();
+                this.setupAutoSave();
+                this.updateProviderUI();
+                this.setupChatResize();
+                this.setupColumnResizers();
+                
+                document.getElementById('ai-provider').value = this.ai.provider;
+                document.getElementById('ai-api-key').value = this.ai.apiKey;
+                document.getElementById('ai-model').value = this.ai.model;
+                document.getElementById('ai-endpoint').value = this.ai.endpoint;
+                
+                if (this.github.connected) {
+                    document.getElementById('github-status').textContent = this.github.repo;
+                }
+                
+                // Show CORS warning for problematic providers
+                this.updateProviderHelp();
+            },
+
+            initMonaco() {
+                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' }});
+                require(['vs/editor/editor.main'], () => {
+                    this.editor = monaco.editor.create(document.getElementById('monaco-editor'), {
+                        value: '', language: 'javascript', theme: this.settings.theme, fontSize: this.settings.fontSize,
+                        wordWrap: this.settings.wordWrap ? 'on' : 'off', automaticLayout: true, minimap: { enabled: true },
+                        scrollBeyondLastLine: false, fixedOverflowWidgets: true
+                    });
+                    let timeout;
+                    this.editor.onDidChangeModelContent(() => {
+                        if (this.currentFile) {
+                            clearTimeout(timeout);
+                            timeout = setTimeout(() => {
+                                this.files[this.currentFile].content = this.editor.getValue();
+                                this.saveToStorage();
+                                if (this.isPreviewable(this.currentFile)) this.updatePreview();
+                            }, 1000);
+                        }
+                    });
+                });
+            },
+
+            setupColumnResizers() {
+                const sidebarResizer = document.getElementById('sidebar-resizer');
+                const previewResizer = document.getElementById('preview-resizer');
+                const appGrid = document.getElementById('app');
+                let isResizingSidebar = false;
+                let isResizingPreview = false;
+
+                sidebarResizer.addEventListener('mousedown', (e) => {
+                    isResizingSidebar = true;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+
+                previewResizer.addEventListener('mousedown', (e) => {
+                    isResizingPreview = true;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (isResizingSidebar) {
+                        const newWidth = Math.max(150, Math.min(400, e.clientX));
+                        appGrid.style.gridTemplate
