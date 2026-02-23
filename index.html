@@ -18,7 +18,6 @@
             width: 100%; 
         }
         
-        /* Resizable Grid Layout */
         .app-grid {
             display: grid;
             grid-template-rows: 56px 1fr;
@@ -29,7 +28,6 @@
             background: #0f172a;
         }
         
-        /* Column Resizers */
         .col-resizer {
             width: 6px;
             background: transparent;
@@ -56,7 +54,6 @@
         
         .header { grid-area: header; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
         
-        /* Sidebar with resizer container */
         .sidebar-container {
             grid-area: sidebar;
             display: flex;
@@ -76,7 +73,6 @@
         .sidebar-top { flex: 1; overflow-y: auto; padding: 8px; }
         .sidebar-bottom { height: 200px; border-top: 1px solid #334155; overflow-y: auto; padding: 8px; }
         
-        /* Editor Section */
         .editor-section { grid-area: editor; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; min-width: 0; }
         .tabs-bar { height: 36px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; overflow-x: auto; }
         .tab { height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-right: 1px solid #334155; cursor: pointer; font-size: 13px; background: #1e293b; color: #94a3b8; white-space: nowrap; }
@@ -96,7 +92,6 @@
         .editor-container { flex: 1; position: relative; overflow: hidden; min-height: 0; background: #0f172a; }
         #monaco-editor { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
         
-        /* Chat Panel with Resize */
         .chat-panel {
             height: 220px;
             min-height: 32px;
@@ -116,7 +111,6 @@
         .chat-bubble.user { background: #3b82f6; color: white; margin-left: auto; }
         .chat-bubble.ai { background: #334155; color: #e2e8f0; }
         
-        /* Preview Section with resizer */
         .preview-container {
             grid-area: preview;
             display: flex;
@@ -137,31 +131,64 @@
         .preview-content { flex: 1; position: relative; background: white; overflow: hidden; }
         #preview-frame { width: 100%; height: 100%; border: none; display: block; }
         
-        /* Nested File Tree */
-        .file-tree { padding-left: 0; }
-        .file-item { 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
-            padding: 4px 8px; 
-            border-radius: 4px; 
-            cursor: pointer; 
+        /* File Tree Styles */
+        .file-tree { 
             font-size: 13px; 
-            margin-bottom: 2px; 
-            color: #cbd5e1; 
+            user-select: none;
         }
-        .file-item:hover { background: #334155; }
-        .file-item.active { background: #3b82f6; color: white; }
-        .file-item .chevron { 
-            width: 16px; 
-            text-align: center; 
-            font-size: 10px; 
-            transition: transform 0.2s; 
+        
+        .tree-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            margin-bottom: 1px;
+            color: #cbd5e1;
         }
-        .file-item .chevron.collapsed { transform: rotate(-90deg); }
-        .file-item .icon { width: 16px; text-align: center; font-size: 12px; }
-        .file-children { padding-left: 16px; }
-        .file-children.collapsed { display: none; }
+        
+        .tree-item:hover {
+            background: #334155;
+        }
+        
+        .tree-item.active {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .tree-item .chevron {
+            width: 16px;
+            text-align: center;
+            font-size: 10px;
+            transition: transform 0.2s;
+            color: #94a3b8;
+        }
+        
+        .tree-item .chevron.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        .tree-item .icon {
+            width: 16px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .tree-item .name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .tree-children {
+            padding-left: 16px;
+        }
+        
+        .tree-children.collapsed {
+            display: none;
+        }
         
         .version-item { display: flex; gap: 8px; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
         .version-item:hover { background: #334155; }
@@ -202,7 +229,6 @@
         ::-webkit-scrollbar-track { background: transparent; } 
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         
-        /* Resizing state */
         .resizing { user-select: none; }
         .resizing iframe { pointer-events: none; }
     </style>
@@ -227,7 +253,6 @@
             </div>
         </header>
 
-        <!-- Sidebar with Resizer -->
         <div class="sidebar-container" id="sidebar-container">
             <aside class="sidebar" id="sidebar">
                 <div class="sidebar-top">
@@ -248,11 +273,9 @@
                     <div id="version-list"></div>
                 </div>
             </aside>
-            <!-- Sidebar Resizer -->
             <div class="col-resizer" id="sidebar-resizer" title="Drag to resize sidebar"></div>
         </div>
 
-        <!-- Editor Section -->
         <section class="editor-section">
             <div class="tabs-bar" id="tabs-container"></div>
             <div class="editor-container">
@@ -293,7 +316,6 @@
             </div>
         </section>
 
-        <!-- Preview Section with Resizer -->
         <div class="preview-container" id="preview-container">
             <div class="col-resizer" id="preview-resizer" title="Drag to resize preview" style="margin-left: -6px;"></div>
             <section class="preview-section" id="preview-section">
@@ -309,7 +331,6 @@
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settings-modal" class="modal hidden">
         <div class="modal-box">
             <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #f8fafc;">Settings</h2>
@@ -384,7 +405,7 @@
     <div id="new-file-modal" class="modal hidden">
         <div class="modal-box" style="max-width: 320px;">
             <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #f8fafc;">Create New File</h3>
-            <input type="text" id="new-file-path" class="input" style="margin-bottom: 8px;" placeholder="folder/subfolder/">
+            <input type="text" id="new-file-path" class="input" style="margin-bottom: 8px;" placeholder="folder/subfolder/ (optional)">
             <input type="text" id="new-file-name" class="input" style="margin-bottom: 16px;" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
             <div style="display: flex; gap: 8px;">
                 <button onclick="app.confirmCreateFile()" class="btn btn-primary" style="flex: 1;">Create</button>
@@ -454,22 +475,17 @@
             },
 
             setupColumnResizers() {
-                // Sidebar resizer
                 const sidebarResizer = document.getElementById('sidebar-resizer');
-                const sidebar = document.getElementById('sidebar-container');
+                const previewResizer = document.getElementById('preview-resizer');
                 const appGrid = document.getElementById('app');
                 let isResizingSidebar = false;
+                let isResizingPreview = false;
 
                 sidebarResizer.addEventListener('mousedown', (e) => {
                     isResizingSidebar = true;
                     document.body.classList.add('resizing');
                     e.preventDefault();
                 });
-
-                // Preview resizer
-                const previewResizer = document.getElementById('preview-resizer');
-                const preview = document.getElementById('preview-container');
-                let isResizingPreview = false;
 
                 previewResizer.addEventListener('mousedown', (e) => {
                     isResizingPreview = true;
@@ -486,8 +502,7 @@
                     if (isResizingPreview) {
                         const totalWidth = window.innerWidth;
                         const newWidth = Math.max(200, Math.min(600, totalWidth - e.clientX));
-                        const sidebarWidth = sidebar.offsetWidth;
-                        const editorWidth = totalWidth - sidebarWidth - newWidth - 12; // 12px for resizers
+                        const sidebarWidth = document.getElementById('sidebar-container').offsetWidth;
                         appGrid.style.gridTemplateColumns = `${sidebarWidth}px 1fr ${newWidth}px`;
                         if (this.editor) this.editor.layout();
                     }
@@ -543,7 +558,6 @@
                 };
                 this.saveToStorage();
                 this.updateProviderUI();
-                console.log('AI Settings saved:', this.ai);
             },
 
             saveSettingsAndClose() {
@@ -577,7 +591,6 @@
             },
 
             updateProviderUI() {
-                const p = this.providers[this.ai.provider];
                 const badge = document.getElementById('active-provider');
                 const badgeClass = this.ai.provider === 'kimi' ? 'badge-kimi' : 
                                   this.ai.provider === 'deepseek' ? 'badge-deepseek' :
@@ -586,12 +599,126 @@
                 
                 if (badge) { 
                     badge.className = `provider-badge ${badgeClass}`; 
-                    badge.textContent = p.name; 
+                    badge.textContent = this.providers[this.ai.provider].name; 
                     badge.style.display = 'inline-flex'; 
                 }
             },
 
-            // Nested File Tree with Folders
+            // FIXED: Proper file tree rendering with nested folders
+            renderFileTree() {
+                const container = document.getElementById('file-tree');
+                container.innerHTML = '';
+                
+                // Build hierarchical structure
+                const root = { name: '', children: {}, isFolder: true };
+                
+                // Sort paths to ensure folders come before files
+                const sortedPaths = Object.keys(this.files).sort((a, b) => {
+                    const aIsFolder = this.files[a].type === 'folder';
+                    const bIsFolder = this.files[b].type === 'folder';
+                    if (aIsFolder && !bIsFolder) return -1;
+                    if (!aIsFolder && bIsFolder) return 1;
+                    return a.localeCompare(b);
+                });
+                
+                // Build tree
+                sortedPaths.forEach(path => {
+                    const parts = path.split('/').filter(p => p);
+                    let current = root;
+                    
+                    parts.forEach((part, index) => {
+                        const isLast = index === parts.length - 1;
+                        const fullPath = parts.slice(0, index + 1).join('/') + (this.files[path].type === 'folder' ? '/' : '');
+                        
+                        if (!current.children[part]) {
+                            current.children[part] = {
+                                name: part,
+                                fullPath: fullPath,
+                                isFolder: this.files[fullPath]?.type === 'folder' || (!isLast),
+                                children: {},
+                                data: this.files[fullPath] || this.files[path]
+                            };
+                        }
+                        current = current.children[part];
+                    });
+                });
+                
+                // Render tree recursively
+                const renderNode = (node, depth = 0) => {
+                    const div = document.createElement('div');
+                    
+                    // Render this item
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = `tree-item ${this.currentFile === node.fullPath ? 'active' : ''}`;
+                    itemDiv.style.paddingLeft = (8 + depth * 12) + 'px';
+                    
+                    const isExpanded = this.expandedFolders.has(node.fullPath);
+                    const hasChildren = Object.keys(node.children).length > 0;
+                    
+                    let iconHtml = '';
+                    if (node.isFolder) {
+                        iconHtml = `<i class="fas fa-chevron-down chevron ${isExpanded ? '' : 'collapsed'} ${hasChildren ? '' : 'hidden'}"></i>
+                                   <i class="fas fa-folder icon" style="color: #eab308;"></i>`;
+                    } else {
+                        const isHtml = node.fullPath.endsWith('.html');
+                        const isCss = node.fullPath.endsWith('.css');
+                        const isJs = node.fullPath.endsWith('.js');
+                        const icon = isHtml ? 'fa-html5' : isCss ? 'fa-css3' : isJs ? 'fa-js' : 'fa-file-code';
+                        const color = isHtml ? '#fb923c' : isCss ? '#60a5fa' : isJs ? '#facc15' : '#94a3b8';
+                        iconHtml = `<span class="chevron" style="visibility: hidden;"></span>
+                                   <i class="fas ${icon} icon" style="color: ${color};"></i>`;
+                    }
+                    
+                    itemDiv.innerHTML = `${iconHtml}<span class="name">${node.name}</span>`;
+                    
+                    if (node.isFolder) {
+                        itemDiv.onclick = (e) => {
+                            e.stopPropagation();
+                            this.toggleFolder(node.fullPath);
+                        };
+                    } else {
+                        itemDiv.onclick = () => this.openFile(node.fullPath);
+                    }
+                    
+                    div.appendChild(itemDiv);
+                    
+                    // Render children if expanded
+                    if (node.isFolder && isExpanded && hasChildren) {
+                        const childrenDiv = document.createElement('div');
+                        childrenDiv.className = 'tree-children';
+                        Object.values(node.children).sort((a, b) => {
+                            if (a.isFolder && !b.isFolder) return -1;
+                            if (!a.isFolder && b.isFolder) return 1;
+                            return a.name.localeCompare(b.name);
+                        }).forEach(child => {
+                            childrenDiv.appendChild(renderNode(child, depth + 1));
+                        });
+                        div.appendChild(childrenDiv);
+                    }
+                    
+                    return div;
+                };
+                
+                // Render root children
+                Object.values(root.children).sort((a, b) => {
+                    if (a.isFolder && !b.isFolder) return -1;
+                    if (!a.isFolder && b.isFolder) return 1;
+                    return a.name.localeCompare(b.name);
+                }).forEach(node => {
+                    container.appendChild(renderNode(node));
+                });
+            },
+
+            toggleFolder(path) {
+                if (this.expandedFolders.has(path)) {
+                    this.expandedFolders.delete(path);
+                } else {
+                    this.expandedFolders.add(path);
+                }
+                this.saveToStorage();
+                this.renderFileTree();
+            },
+
             createFile() {
                 document.getElementById('new-file-modal').classList.remove('hidden');
                 document.getElementById('new-file-name').focus();
@@ -603,24 +730,25 @@
                 const fullPath = path ? (path.endsWith('/') ? path + name : path + '/' + name) : name;
                 
                 if (name && !this.files[fullPath]) {
-                    // Create parent folders if they don't exist
+                    // Create parent folders
                     if (path) {
                         const parts = path.split('/').filter(p => p);
                         let currentPath = '';
                         for (const part of parts) {
                             currentPath = currentPath ? currentPath + '/' + part : part;
-                            if (!this.files[currentPath + '/']) {
-                                this.files[currentPath + '/'] = { content: null, type: 'folder', children: [] };
+                            const folderPath = currentPath + '/';
+                            if (!this.files[folderPath]) {
+                                this.files[folderPath] = { content: null, type: 'folder' };
                             }
+                            this.expandedFolders.add(folderPath);
                         }
                     }
                     
                     this.files[fullPath] = { content: '', type: 'file' };
-                    this.expandedFolders.add(path || '');
-                    this.saveToStorage(); 
-                    this.renderFileTree(); 
+                    this.saveToStorage();
+                    this.renderFileTree();
                     this.openFile(fullPath);
-                    this.closeModal('new-file-modal'); 
+                    this.closeModal('new-file-modal');
                     document.getElementById('new-file-path').value = '';
                     document.getElementById('new-file-name').value = '';
                 }
@@ -633,110 +761,28 @@
                     let currentPath = '';
                     for (const part of parts) {
                         currentPath = currentPath ? currentPath + '/' + part : part;
-                        if (!this.files[currentPath + '/']) {
-                            this.files[currentPath + '/'] = { content: null, type: 'folder', children: [] };
+                        const folderPath = currentPath + '/';
+                        if (!this.files[folderPath]) {
+                            this.files[folderPath] = { content: null, type: 'folder' };
                         }
+                        this.expandedFolders.add(folderPath);
                     }
-                    this.saveToStorage(); 
+                    this.saveToStorage();
                     this.renderFileTree();
                 }
             },
 
-            toggleFolder(path) {
-                if (this.expandedFolders.has(path)) {
-                    this.expandedFolders.delete(path);
-                } else {
-                    this.expandedFolders.add(path);
-                }
-                this.renderFileTree();
-            },
-
-            renderFileTree() {
-                const container = document.getElementById('file-tree'); 
-                container.innerHTML = '';
-                
-                // Build tree structure
-                const tree = {};
-                const rootFiles = [];
-                
-                Object.keys(this.files).sort().forEach(path => {
-                    const parts = path.split('/');
-                    if (parts.length === 1 || (parts.length === 2 && parts[1] === '')) {
-                        // Root level file or folder
-                        rootFiles.push(path);
-                    }
-                });
-                
-                const renderItem = (path, depth = 0) => {
-                    const item = this.files[path];
-                    const isFolder = item.type === 'folder';
-                    const name = path.endsWith('/') ? path.slice(0, -1).split('/').pop() : path.split('/').pop();
-                    const isExpanded = this.expandedFolders.has(path);
-                    
-                    const div = document.createElement('div');
-                    div.style.paddingLeft = (depth * 12) + 'px';
-                    
-                    const content = document.createElement('div');
-                    content.className = `file-item ${this.currentFile === path ? 'active' : ''}`;
-                    
-                    let iconHtml = '';
-                    if (isFolder) {
-                        iconHtml = `<i class="fas fa-chevron-down chevron ${isExpanded ? '' : 'collapsed'}" style="width: 16px; text-align: center; font-size: 10px; color: #94a3b8;"></i>
-                                   <i class="fas fa-folder icon" style="color: #eab308;"></i>`;
-                    } else {
-                        const icon = path.endsWith('.js') ? 'fa-js' : path.endsWith('.html') ? 'fa-html5' : path.endsWith('.css') ? 'fa-css3' : 'fa-file-code';
-                        const color = path.endsWith('.js') ? '#facc15' : path.endsWith('.html') ? '#fb923c' : path.endsWith('.css') ? '#60a5fa' : '#94a3b8';
-                        iconHtml = `<span style="width: 16px; display: inline-block;"></span>
-                                   <i class="fas ${icon} icon" style="color: ${color};"></i>`;
-                    }
-                    
-                    content.innerHTML = `${iconHtml}<span class="truncate" style="flex: 1;">${name}</span>
-                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${path}')" style="padding: 4px; background: transparent; border: none; cursor: pointer; opacity: 0; color: inherit;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0"><i class="fas fa-times" style="font-size: 12px;"></i></button>` : ''}`;
-                    
-                    content.onclick = () => {
-                        if (isFolder) {
-                            this.toggleFolder(path);
-                        } else {
-                            this.openFile(path);
-                        }
-                    };
-                    
-                    div.appendChild(content);
-                    container.appendChild(div);
-                    
-                    // Render children if expanded folder
-                    if (isFolder && isExpanded) {
-                        const children = Object.keys(this.files).filter(p => {
-                            if (p === path) return false;
-                            if (path === '') return p.split('/').length === 1 || (p.split('/').length === 2 && p.endsWith('/'));
-                            return p.startsWith(path) && p !== path;
-                        }).sort();
-                        
-                        // Filter direct children only
-                        const directChildren = children.filter(p => {
-                            const relative = p.slice(path.length);
-                            const parts = relative.split('/').filter(x => x);
-                            return parts.length === 1 || (parts.length === 2 && p.endsWith('/'));
-                        });
-                        
-                        directChildren.forEach(child => renderItem(child, depth + 1));
-                    }
-                };
-                
-                // Render root items
-                rootFiles.forEach(path => renderItem(path));
-            },
-
             openFile(filename) {
                 if (this.files[filename]?.type === 'folder') return;
-                this.currentFile = filename; 
+                this.currentFile = filename;
                 document.getElementById('empty-state').style.display = 'none';
                 if (this.editor) {
                     const model = monaco.editor.createModel(this.files[filename]?.content || '', this.getLanguage(filename));
                     this.editor.setModel(model);
                 }
-                this.renderTabs(); 
+                this.renderTabs();
                 this.renderFileTree();
+                if (this.isPreviewable(filename)) this.updatePreview();
             },
 
             closeFile(filename) {
@@ -745,10 +791,13 @@
                     const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
                     this.currentFile = remaining[0] || null;
                     if (this.currentFile) this.openFile(this.currentFile);
-                    else { if (this.editor) this.editor.setValue(''); document.getElementById('empty-state').style.display = 'flex'; }
+                    else {
+                        if (this.editor) this.editor.setValue('');
+                        document.getElementById('empty-state').style.display = 'flex';
+                    }
                 }
-                this.saveToStorage(); 
-                this.renderTabs(); 
+                this.saveToStorage();
+                this.renderTabs();
                 this.renderFileTree();
             },
 
@@ -758,28 +807,28 @@
                 return map[ext] || 'plaintext';
             },
 
-            isPreviewable(filename) { 
-                return filename.endsWith('.html') || filename.endsWith('.htm'); 
+            isPreviewable(filename) {
+                return filename.endsWith('.html') || filename.endsWith('.htm');
             },
 
             renderTabs() {
-                const container = document.getElementById('tabs-container'); 
+                const container = document.getElementById('tabs-container');
                 container.innerHTML = '';
                 Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
-                    const tab = document.createElement('div'); 
+                    const tab = document.createElement('div');
                     tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
                     const icon = filename.endsWith('.js') ? 'fa-js' : filename.endsWith('.html') ? 'fa-html5' : filename.endsWith('.css') ? 'fa-css3' : 'fa-file-code';
                     const showPreview = this.isPreviewable(filename);
+                    const displayName = filename.split('/').pop();
                     tab.innerHTML = `<i class="fas ${icon}" style="font-size: 12px;"></i>
-                        <span class="truncate" style="max-width: 100px;">${filename.split('/').pop()}</span>
+                        <span class="truncate" style="max-width: 100px;">${displayName}</span>
                         ${showPreview ? `<button class="preview-btn" onclick="event.stopPropagation(); app.previewFile('${filename}')" title="Preview"><i class="fas fa-eye"></i></button>` : ''}
                         <button onclick="event.stopPropagation(); app.closeFile('${filename}')" style="margin-left: 4px; background: transparent; border: none; cursor: pointer; color: inherit;"><i class="fas fa-times" style="font-size: 12px;"></i></button>`;
-                    tab.onclick = () => this.openFile(filename); 
+                    tab.onclick = () => this.openFile(filename);
                     container.appendChild(tab);
                 });
             },
 
-            // Preview any HTML file
             previewFile(filename) {
                 this.currentFile = filename;
                 this.openFile(filename);
@@ -794,8 +843,8 @@
                 document.getElementById('preview-frame').src = URL.createObjectURL(blob);
             },
 
-            refreshPreview() { 
-                this.updatePreview(); 
+            refreshPreview() {
+                this.updatePreview();
             },
 
             openPreviewInNewTab() {
@@ -806,8 +855,8 @@
             },
 
             async sendMessage() {
-                const input = document.getElementById('chat-input'); 
-                const message = input.value.trim(); 
+                const input = document.getElementById('chat-input');
+                const message = input.value.trim();
                 if (!message) return;
                 
                 if (!this.ai.apiKey && this.ai.provider !== 'local') {
@@ -815,20 +864,21 @@
                     return;
                 }
                 
-                this.addChatMessage(message, 'user'); 
-                input.value = ''; 
+                this.addChatMessage(message, 'user');
+                input.value = '';
                 document.getElementById('ai-status').textContent = 'Thinking...';
                 
                 try {
-                    const response = await this.callAI(message); 
+                    const response = await this.callAI(message);
                     this.addChatMessage(response, 'ai');
-                    if (response.includes('```')) this.addChatMessage('Click <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer;">Apply Changes</button> to update the file.', 'ai');
-                } catch (error) { 
-                    this.addChatMessage('Error: ' + error.message, 'ai'); 
+                    if (response.includes('```')) {
+                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer;">Apply Changes</button> to update the file.', 'ai');
+                    }
+                } catch (error) {
+                    this.addChatMessage('Error: ' + error.message, 'ai');
                     console.error('AI Error:', error);
-                }
-                finally { 
-                    document.getElementById('ai-status').textContent = 'Ready'; 
+                } finally {
+                    document.getElementById('ai-status').textContent = 'Ready';
                 }
             },
 
@@ -842,20 +892,19 @@
                 let url, body, headers;
 
                 if (provider === 'openai' || provider === 'deepseek' || provider === 'kimi') {
-                    // Kimi uses OpenAI-compatible format
-                    url = config.baseUrl; 
+                    url = config.baseUrl;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ 
-                        model: model || config.model, 
+                    body = JSON.stringify({
+                        model: model || config.model,
                         messages: [
-                            { role: 'system', content: 'You are a helpful coding assistant.' }, 
+                            { role: 'system', content: 'You are a helpful coding assistant.' },
                             { role: 'user', content: context }
-                        ], 
-                        temperature: 0.7, 
-                        max_tokens: 4096 
+                        ],
+                        temperature: 0.7,
+                        max_tokens: 4096
                     });
                 } else if (provider === 'anthropic') {
-                    url = config.baseUrl; 
+                    url = config.baseUrl;
                     headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
                     body = JSON.stringify({ model: model || config.model, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
                 } else if (provider === 'google') {
@@ -863,7 +912,7 @@
                     headers = { 'Content-Type': 'application/json' };
                     body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
                 } else {
-                    url = endpoint; 
+                    url = endpoint;
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
                     body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
                 }
@@ -881,75 +930,75 @@
             },
 
             addChatMessage(text, sender) {
-                const container = document.getElementById('chat-messages'); 
+                const container = document.getElementById('chat-messages');
                 const div = document.createElement('div');
-                div.className = `chat-bubble ${sender}`; 
-                div.innerHTML = text; 
-                container.appendChild(div); 
+                div.className = `chat-bubble ${sender}`;
+                div.innerHTML = text;
+                container.appendChild(div);
                 container.scrollTop = container.scrollHeight;
             },
 
             quickAction(action) {
                 const actions = { explain: 'Explain this code', fix: 'Fix bugs in this code', optimize: 'Optimize this code', document: 'Add documentation to this code' };
-                document.getElementById('chat-input').value = actions[action]; 
+                document.getElementById('chat-input').value = actions[action];
                 this.sendMessage();
             },
 
             applyAIChanges() {
-                const messages = document.getElementById('chat-messages').children; 
+                const messages = document.getElementById('chat-messages').children;
                 const lastMessage = messages[messages.length - 2];
-                const text = lastMessage.textContent; 
+                const text = lastMessage.textContent;
                 const codeBlock = text.match(/```[\w]*\n([\s\S]*?)```/);
-                if (codeBlock && this.currentFile) { 
-                    this.files[this.currentFile].content = codeBlock[1].trim(); 
-                    this.openFile(this.currentFile); 
-                    this.showToast('Changes applied!'); 
+                if (codeBlock && this.currentFile) {
+                    this.files[this.currentFile].content = codeBlock[1].trim();
+                    this.openFile(this.currentFile);
+                    this.showToast('Changes applied!');
                 }
             },
 
             toggleChat() {
-                const panel = document.getElementById('chat-panel'); 
-                const icon = document.getElementById('chat-toggle-icon'); 
+                const panel = document.getElementById('chat-panel');
+                const icon = document.getElementById('chat-toggle-icon');
                 this.chatCollapsed = !this.chatCollapsed;
-                if (this.chatCollapsed) { 
+                if (this.chatCollapsed) {
                     this.chatHeight = panel.offsetHeight;
-                    panel.style.height = '32px'; 
-                    icon.classList.remove('fa-chevron-down'); 
-                    icon.classList.add('fa-chevron-up'); 
-                } else { 
-                    panel.style.height = this.chatHeight + 'px'; 
-                    icon.classList.remove('fa-chevron-up'); 
-                    icon.classList.add('fa-chevron-down'); 
+                    panel.style.height = '32px';
+                    icon.classList.remove('fa-chevron-down');
+                    icon.classList.add('fa-chevron-up');
+                } else {
+                    panel.style.height = this.chatHeight + 'px';
+                    icon.classList.remove('fa-chevron-up');
+                    icon.classList.add('fa-chevron-down');
                 }
             },
 
             showGitHubModal() {
                 document.getElementById('github-modal').classList.remove('hidden');
-                if (this.github.token) { 
-                    document.getElementById('github-token').value = this.github.token; 
-                    document.getElementById('github-repo').value = this.github.repo || ''; 
+                if (this.github.token) {
+                    document.getElementById('github-token').value = this.github.token;
+                    document.getElementById('github-repo').value = this.github.repo || '';
                 }
             },
 
             async connectGitHub() {
-                const token = document.getElementById('github-token').value.trim(); 
+                const token = document.getElementById('github-token').value.trim();
                 const repo = document.getElementById('github-repo').value.trim();
-                if (!token || !repo) { 
-                    alert('Please provide both token and repository'); 
-                    return; 
+                if (!token || !repo) {
+                    alert('Please provide both token and repository');
+                    return;
                 }
                 try {
                     const response = await fetch('https://api.github.com/user', { headers: { 'Authorization': `token ${token}` } });
                     if (response.ok) {
-                        this.github = { token, repo, connected: true }; 
-                        this.saveToStorage(); 
+                        this.github = { token, repo, connected: true };
+                        this.saveToStorage();
                         document.getElementById('github-status').textContent = repo;
-                        this.closeModal('github-modal'); 
-                        this.showToast('Connected to GitHub!'); 
+                        this.closeModal('github-modal');
+                        this.showToast('Connected to GitHub!');
                         this.loadGitHubRepo();
                     } else alert('Invalid token');
-                } catch (error) { 
-                    alert('Error: ' + error.message); 
+                } catch (error) {
+                    alert('Error: ' + error.message);
                 }
             },
 
@@ -958,73 +1007,73 @@
                 try {
                     const [owner, repo] = this.github.repo.split('/');
                     const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents`, { headers: { 'Authorization': `token ${this.github.token}` } });
-                    const data = await response.json(); 
+                    const data = await response.json();
                     this.files = {};
                     for (const item of data) if (item.type === 'file') {
-                        const contentResponse = await fetch(item.download_url); 
+                        const contentResponse = await fetch(item.download_url);
                         const content = await contentResponse.text();
                         this.files[item.name] = { content, type: 'file' };
                     }
-                    this.saveToStorage(); 
-                    this.renderFileTree(); 
+                    this.saveToStorage();
+                    this.renderFileTree();
                     this.showToast('Repository loaded!');
                     const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
-                    if (firstHtml) this.openFile(firstHtml); 
+                    if (firstHtml) this.openFile(firstHtml);
                     else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
-                } catch (error) { 
-                    this.showToast('Error loading repository'); 
+                } catch (error) {
+                    this.showToast('Error loading repository');
                 }
             },
 
             async deployToGitHub() {
-                if (!this.github.connected) { 
-                    this.showGitHubModal(); 
-                    return; 
+                if (!this.github.connected) {
+                    this.showGitHubModal();
+                    return;
                 }
-                const [owner, repo] = this.github.repo.split('/'); 
+                const [owner, repo] = this.github.repo.split('/');
                 let successCount = 0;
                 for (const [filename, fileData] of Object.entries(this.files)) {
                     if (fileData.type === 'folder') continue;
                     try {
                         const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, { headers: { 'Authorization': `token ${this.github.token}` } });
-                        let sha = null; 
+                        let sha = null;
                         if (getResponse.ok) sha = (await getResponse.json()).sha;
                         const body = { message: `Update ${filename} via DevStudio`, content: btoa(unescape(encodeURIComponent(fileData.content))), ...(sha && { sha }) };
                         const putResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, { method: 'PUT', headers: { 'Authorization': `token ${this.github.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
                         if (putResponse.ok) successCount++;
-                    } catch (error) { 
-                        console.error(`Error saving ${filename}:`, error); 
+                    } catch (error) {
+                        console.error(`Error saving ${filename}:`, error);
                     }
                 }
                 this.showToast(`Synced ${successCount} files to GitHub!`);
             },
 
-            toggleSettings() { 
+            toggleSettings() {
                 this.updateProviderHelp();
-                document.getElementById('settings-modal').classList.remove('hidden'); 
+                document.getElementById('settings-modal').classList.remove('hidden');
             },
 
-            updateEditorTheme() { 
-                this.settings.theme = document.getElementById('editor-theme').value; 
-                if (this.editor) monaco.editor.setTheme(this.settings.theme); 
-                this.saveToStorage(); 
+            updateEditorTheme() {
+                this.settings.theme = document.getElementById('editor-theme').value;
+                if (this.editor) monaco.editor.setTheme(this.settings.theme);
+                this.saveToStorage();
             },
 
             createCheckpoint() {
                 const checkpoint = { id: Date.now(), timestamp: new Date().toISOString(), message: `Checkpoint ${this.versions.length + 1}`, files: JSON.parse(JSON.stringify(this.files)) };
-                this.versions.unshift(checkpoint); 
+                this.versions.unshift(checkpoint);
                 if (this.versions.length > 20) this.versions.pop();
-                this.saveToStorage(); 
-                this.renderVersions(); 
+                this.saveToStorage();
+                this.renderVersions();
                 this.showToast('Checkpoint saved!');
             },
 
             restoreVersion(id) {
                 const version = this.versions.find(v => v.id === id);
                 if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
-                    this.createCheckpoint(); 
+                    this.createCheckpoint();
                     this.files = JSON.parse(JSON.stringify(version.files));
-                    this.saveToStorage(); 
+                    this.saveToStorage();
                     this.renderFileTree();
                     if (this.currentFile && this.files[this.currentFile]) this.openFile(this.currentFile);
                     this.showToast('Version restored!');
@@ -1032,78 +1081,87 @@
             },
 
             renderVersions() {
-                const container = document.getElementById('version-list'); 
+                const container = document.getElementById('version-list');
                 container.innerHTML = '';
                 this.versions.forEach((version, index) => {
-                    const div = document.createElement('div'); 
-                    div.className = 'version-item'; 
+                    const div = document.createElement('div');
+                    div.className = 'version-item';
                     div.onclick = () => this.restoreVersion(version.id);
                     div.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center;"><div class="version-dot ${index === 0 ? 'active' : ''}"></div>${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}</div><div style="flex: 1; min-width: 0;"><div class="truncate" style="font-size: 12px; font-weight: 600; color: #e2e8f0;">${version.message}</div><div style="font-size: 12px; color: #64748b;">${new Date(version.timestamp).toLocaleString()}</div></div>`;
                     container.appendChild(div);
                 });
             },
 
-            saveToStorage() { 
-                localStorage.setItem('devstudio_data', JSON.stringify({ files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings, expandedFolders: Array.from(this.expandedFolders) })); 
+            saveToStorage() {
+                localStorage.setItem('devstudio_data', JSON.stringify({
+                    files: this.files,
+                    versions: this.versions,
+                    github: this.github,
+                    ai: this.ai,
+                    settings: this.settings,
+                    expandedFolders: Array.from(this.expandedFolders)
+                }));
             },
 
             loadFromStorage() {
                 const data = localStorage.getItem('devstudio_data');
-                if (data) { 
-                    const parsed = JSON.parse(data); 
-                    this.files = parsed.files || {}; 
-                    this.versions = parsed.versions || []; 
-                    this.github = parsed.github || { token: null, repo: null, connected: false }; 
-                    this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' }; 
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    this.files = parsed.files || {};
+                    this.versions = parsed.versions || [];
+                    this.github = parsed.github || { token: null, repo: null, connected: false };
+                    this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' };
                     this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
                     this.expandedFolders = new Set(parsed.expandedFolders || ['']);
-                }
-                else {
-                    this.files = { 
-                        'index.html': { content: `<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }\nh1 { font-size: 3rem; }\n.card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }\n</style>\n</head>\n<body>\n<h1>Welcome to DevStudio</h1>\n<div class="card">\n<h2>Getting Started</h2>\n<ul>\n<li>Edit files in the left sidebar</li>\n<li>Use the AI chat for help</li>\n<li>Drag borders to resize panels</li>\n<li>Click the eye icon on any HTML tab to preview</li>\n</ul>\n</div>\n</body>\n</html>`, type: 'file' }, 
+                } else {
+                    // Demo data with nested structure
+                    this.files = {
+                        'index.html': { content: `<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }\nh1 { font-size: 3rem; }\n.card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }\n</style>\n</head>\n<body>\n<h1>Welcome to DevStudio</h1>\n<div class="card">\n<h2>Getting Started</h2>\n<ul>\n<li>Edit files in the left sidebar</li>\n<li>Click folders to expand/collapse</li>\n<li>Drag borders to resize panels</li>\n<li>Click the eye icon to preview any HTML file</li>\n</ul>\n</div>\n</body>\n</html>`, type: 'file' },
+                        'about.html': { content: '<!DOCTYPE html><html><body><h1>About Page</h1></body></html>', type: 'file' },
+                        'src/': { content: null, type: 'folder' },
                         'src/style.css': { content: '/* Styles */', type: 'file' },
                         'src/app.js': { content: '// JavaScript', type: 'file' },
-                        'src/': { content: null, type: 'folder' }
+                        'src/components/': { content: null, type: 'folder' },
+                        'src/components/header.html': { content: '<header>Header</header>', type: 'file' }
                     };
-                    this.expandedFolders.add('');
-                    this.expandedFolders.add('src/');
+                    this.expandedFolders = new Set(['', 'src/', 'src/components/']);
                     this.createCheckpoint();
                 }
             },
 
             exportProject() {
-                let content = ''; 
+                let content = '';
                 for (const [name, data] of Object.entries(this.files)) if (data.type === 'file') content += `=== ${name} ===\n${data.content}\n\n`;
-                const blob = new Blob([content], { type: 'text/plain' }); 
-                const url = URL.createObjectURL(blob); 
-                const a = document.createElement('a'); 
-                a.href = url; 
-                a.download = 'project-export.txt'; 
-                a.click(); 
+                const blob = new Blob([content], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'project-export.txt';
+                a.click();
                 URL.revokeObjectURL(url);
             },
 
-            clearAllData() { 
-                if (confirm('Are you sure? This will delete all files and history.')) { 
-                    localStorage.removeItem('devstudio_data'); 
-                    location.reload(); 
-                } 
+            clearAllData() {
+                if (confirm('Are you sure? This will delete all files and history.')) {
+                    localStorage.removeItem('devstudio_data');
+                    location.reload();
+                }
             },
 
-            closeModal(id) { 
-                document.getElementById(id).classList.add('hidden'); 
+            closeModal(id) {
+                document.getElementById(id).classList.add('hidden');
             },
 
-            showToast(message) { 
-                const toast = document.createElement('div'); 
-                toast.className = 'toast'; 
-                toast.textContent = message; 
-                document.body.appendChild(toast); 
-                setTimeout(() => toast.remove(), 3000); 
+            showToast(message) {
+                const toast = document.createElement('div');
+                toast.className = 'toast';
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3000);
             },
 
-            setupAutoSave() { 
-                setInterval(() => { if (this.currentFile) this.saveToStorage(); }, 30000); 
+            setupAutoSave() {
+                setInterval(() => { if (this.currentFile) this.saveToStorage(); }, 30000);
             }
         };
         window.addEventListener('DOMContentLoaded', () => app.init());
