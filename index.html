@@ -17,6 +17,8 @@
             height: 100%; 
             width: 100%; 
         }
+        
+        /* Resizable Grid Layout */
         .app-grid {
             display: grid;
             grid-template-rows: 56px 1fr;
@@ -26,15 +28,72 @@
             width: 100vw;
             background: #0f172a;
         }
+        
+        /* Column Resizers */
+        .col-resizer {
+            width: 6px;
+            background: transparent;
+            cursor: col-resize;
+            position: relative;
+            z-index: 20;
+        }
+        
+        .col-resizer:hover, .col-resizer.resizing {
+            background: #3b82f6;
+        }
+        
+        .col-resizer::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background: #475569;
+            border-radius: 1px;
+        }
+        
         .header { grid-area: header; background: #1e293b; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
-        .sidebar { grid-area: sidebar; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Sidebar with resizer container */
+        .sidebar-container {
+            grid-area: sidebar;
+            display: flex;
+            position: relative;
+        }
+        
+        .sidebar {
+            flex: 1;
+            background: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 150px;
+        }
+        
         .sidebar-top { flex: 1; overflow-y: auto; padding: 8px; }
         .sidebar-bottom { height: 200px; border-top: 1px solid #334155; overflow-y: auto; padding: 8px; }
-        .editor-section { grid-area: editor; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; }
+        
+        /* Editor Section */
+        .editor-section { grid-area: editor; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; min-width: 0; }
         .tabs-bar { height: 36px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; overflow-x: auto; }
         .tab { height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-right: 1px solid #334155; cursor: pointer; font-size: 13px; background: #1e293b; color: #94a3b8; white-space: nowrap; }
         .tab.active { background: #334155; color: #f8fafc; border-top: 2px solid #3b82f6; }
-        .editor-container { flex: 1; position: relative; overflow: hidden; background: #0f172a; }
+        .tab .preview-btn { 
+            margin-left: 4px; 
+            padding: 2px 4px; 
+            background: #10b981; 
+            color: white; 
+            border-radius: 3px; 
+            font-size: 9px; 
+            border: none; 
+            cursor: pointer;
+            display: none;
+        }
+        .tab:hover .preview-btn, .tab.active .preview-btn { display: inline-block; }
+        .editor-container { flex: 1; position: relative; overflow: hidden; min-height: 0; background: #0f172a; }
         #monaco-editor { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
         
         /* Chat Panel with Resize */
@@ -48,77 +107,108 @@
             flex-direction: column;
             position: relative;
         }
-        
-        .chat-resizer {
-            height: 6px;
-            background: transparent;
-            cursor: ns-resize;
-            position: absolute;
-            top: -3px;
-            left: 0;
-            right: 0;
-            z-index: 10;
-        }
-        
-        .chat-resizer:hover {
-            background: #3b82f6;
-            opacity: 0.5;
-        }
-        
-        .chat-header {
-            height: 32px;
-            padding: 0 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #334155;
-            cursor: pointer;
-            background: #252f47;
-            user-select: none;
-        }
-        
+        .chat-resizer { height: 6px; background: transparent; cursor: ns-resize; position: absolute; top: -3px; left: 0; right: 0; z-index: 10; }
+        .chat-resizer:hover { background: #3b82f6; opacity: 0.5; }
+        .chat-header { height: 32px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; cursor: pointer; background: #252f47; user-select: none; }
         .chat-messages { flex: 1; overflow-y: auto; padding: 12px; }
         .chat-input-area { padding: 12px; border-top: 1px solid #334155; }
         .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.4; }
         .chat-bubble.user { background: #3b82f6; color: white; margin-left: auto; }
         .chat-bubble.ai { background: #334155; color: #e2e8f0; }
         
-        .preview-section { grid-area: preview; background: #1e293b; border-left: 1px solid #334155; display: flex; flex-direction: column; overflow: hidden; }
+        /* Preview Section with resizer */
+        .preview-container {
+            grid-area: preview;
+            display: flex;
+            position: relative;
+        }
+        
+        .preview-section {
+            flex: 1;
+            background: #1e293b;
+            border-left: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            min-width: 200px;
+        }
+        
         .preview-header { height: 36px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #334155; background: #1e293b; }
         .preview-content { flex: 1; position: relative; background: white; overflow: hidden; }
         #preview-frame { width: 100%; height: 100%; border: none; display: block; }
-        .file-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 13px; margin-bottom: 2px; color: #cbd5e1; }
+        
+        /* Nested File Tree */
+        .file-tree { padding-left: 0; }
+        .file-item { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            padding: 4px 8px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 13px; 
+            margin-bottom: 2px; 
+            color: #cbd5e1; 
+        }
         .file-item:hover { background: #334155; }
         .file-item.active { background: #3b82f6; color: white; }
+        .file-item .chevron { 
+            width: 16px; 
+            text-align: center; 
+            font-size: 10px; 
+            transition: transform 0.2s; 
+        }
+        .file-item .chevron.collapsed { transform: rotate(-90deg); }
+        .file-item .icon { width: 16px; text-align: center; font-size: 12px; }
+        .file-children { padding-left: 16px; }
+        .file-children.collapsed { display: none; }
+        
         .version-item { display: flex; gap: 8px; padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
         .version-item:hover { background: #334155; }
         .version-dot { width: 10px; height: 10px; border-radius: 50%; background: #64748b; margin-top: 4px; flex-shrink: 0; }
         .version-dot.active { background: #10b981; }
         .version-line { width: 2px; background: #475569; margin-left: 4px; flex-grow: 1; min-height: 20px; }
+        
         .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
         .modal.hidden { display: none !important; }
         .modal-box { background: #1e293b; border: 1px solid #334155; border-radius: 12px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; padding: 24px; color: #e2e8f0; }
+        
         .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; }
         .btn-primary { background: #3b82f6; color: white; }
         .btn-primary:hover { background: #2563eb; }
         .btn-secondary { background: #334155; color: #e2e8f0; }
         .btn-secondary:hover { background: #475569; }
+        
         .input { width: 100%; padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #e2e8f0; font-size: 14px; margin-top: 4px; }
         .input:focus { outline: none; border-color: #3b82f6; }
+        
         .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .flex { display: flex; } .items-center { align-items: center; } .justify-between { justify-content: space-between; } .gap-2 { gap: 8px; } .gap-3 { gap: 12px; }
         .text-xs { font-size: 12px; } .text-sm { font-size: 14px; } .font-semibold { font-weight: 600; }
         .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; } .mt-2 { margin-top: 8px; } .mt-4 { margin-top: 16px; }
+        
         .provider-badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
-        .badge-openai { background: #10a37f; color: white; } .badge-anthropic { background: #d4a574; color: #1a1a1a; }
-        .badge-google { background: #4285f4; color: white; } .badge-deepseek { background: #4f46e5; color: white; }
+        .badge-openai { background: #10a37f; color: white; } 
+        .badge-anthropic { background: #d4a574; color: #1a1a1a; }
+        .badge-google { background: #4285f4; color: white; } 
+        .badge-deepseek { background: #4f46e5; color: white; }
+        .badge-kimi { background: #f97316; color: white; }
+        .badge-local { background: #64748b; color: white; }
+        
         .empty-state { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #64748b; background: #0f172a; }
         .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; border: 1px solid #334155; padding: 12px 20px; border-radius: 8px; color: #e2e8f0; z-index: 200; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; } 
+        ::-webkit-scrollbar-track { background: transparent; } 
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        
+        /* Resizing state */
+        .resizing { user-select: none; }
+        .resizing iframe { pointer-events: none; }
     </style>
 </head>
 <body>
-    <div class="app-grid">
+    <div id="app" class="app-grid">
         <header class="header">
             <div class="flex items-center gap-3">
                 <div style="width: 32px; height: 32px; background: #3b82f6; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
@@ -137,26 +227,32 @@
             </div>
         </header>
 
-        <aside class="sidebar">
-            <div class="sidebar-top">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px;">
-                    <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Explorer</span>
-                    <div style="display: flex; gap: 4px;">
-                        <button onclick="app.createFile()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New File"><i class="fas fa-file-medical" style="font-size: 12px;"></i></button>
-                        <button onclick="app.createFolder()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New Folder"><i class="fas fa-folder-plus" style="font-size: 12px;"></i></button>
+        <!-- Sidebar with Resizer -->
+        <div class="sidebar-container" id="sidebar-container">
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-top">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px;">
+                        <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Explorer</span>
+                        <div style="display: flex; gap: 4px;">
+                            <button onclick="app.createFile()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New File"><i class="fas fa-file-medical" style="font-size: 12px;"></i></button>
+                            <button onclick="app.createFolder()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="New Folder"><i class="fas fa-folder-plus" style="font-size: 12px;"></i></button>
+                        </div>
                     </div>
+                    <div id="file-tree" class="file-tree"></div>
                 </div>
-                <div id="file-tree"></div>
-            </div>
-            <div class="sidebar-bottom">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px; border-bottom: 1px solid #334155;">
-                    <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">History</span>
-                    <button onclick="app.createCheckpoint()" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class="fas fa-save" style="margin-right: 4px;"></i>Save</button>
+                <div class="sidebar-bottom">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px; margin-bottom: 8px; border-bottom: 1px solid #334155;">
+                        <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">History</span>
+                        <button onclick="app.createCheckpoint()" style="padding: 4px 8px; background: #334155; color: #e2e8f0; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;"><i class="fas fa-save" style="margin-right: 4px;"></i>Save</button>
+                    </div>
+                    <div id="version-list"></div>
                 </div>
-                <div id="version-list"></div>
-            </div>
-        </aside>
+            </aside>
+            <!-- Sidebar Resizer -->
+            <div class="col-resizer" id="sidebar-resizer" title="Drag to resize sidebar"></div>
+        </div>
 
+        <!-- Editor Section -->
         <section class="editor-section">
             <div class="tabs-bar" id="tabs-container"></div>
             <div class="editor-container">
@@ -169,7 +265,6 @@
                 </div>
             </div>
             
-            <!-- Chat Panel with Resizer -->
             <div class="chat-panel" id="chat-panel">
                 <div class="chat-resizer" id="chat-resizer" title="Drag to resize"></div>
                 <div class="chat-header" onclick="app.toggleChat()">
@@ -198,19 +293,23 @@
             </div>
         </section>
 
-        <section class="preview-section">
-            <div class="preview-header">
-                <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Live Preview</span>
-                <div style="display: flex; gap: 8px;">
-                    <button onclick="app.refreshPreview()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Refresh"><i class="fas fa-sync-alt" style="font-size: 12px;"></i></button>
-                    <button onclick="app.openPreviewInNewTab()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Open in New Tab"><i class="fas fa-external-link-alt" style="font-size: 12px;"></i></button>
+        <!-- Preview Section with Resizer -->
+        <div class="preview-container" id="preview-container">
+            <div class="col-resizer" id="preview-resizer" title="Drag to resize preview" style="margin-left: -6px;"></div>
+            <section class="preview-section" id="preview-section">
+                <div class="preview-header">
+                    <span style="font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;">Live Preview</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button onclick="app.refreshPreview()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Refresh"><i class="fas fa-sync-alt" style="font-size: 12px;"></i></button>
+                        <button onclick="app.openPreviewInNewTab()" style="padding: 4px; background: transparent; border: none; cursor: pointer; color: #94a3b8; border-radius: 4px;" onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'" title="Open in New Tab"><i class="fas fa-external-link-alt" style="font-size: 12px;"></i></button>
+                    </div>
                 </div>
-            </div>
-            <div class="preview-content"><iframe id="preview-frame"></iframe></div>
-        </section>
+                <div class="preview-content"><iframe id="preview-frame"></iframe></div>
+            </section>
+        </div>
     </div>
 
-    <!-- Settings Modal - Now saves on close -->
+    <!-- Settings Modal -->
     <div id="settings-modal" class="modal hidden">
         <div class="modal-box">
             <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #f8fafc;">Settings</h2>
@@ -221,7 +320,8 @@
                     <option value="openai">OpenAI (GPT-4)</option>
                     <option value="anthropic">Anthropic (Claude)</option>
                     <option value="google">Google (Gemini)</option>
-                    <option value="deepseek">Deepseek (V3/R1)</option>
+                    <option value="deepseek">Deepseek (V3/R1) - Paid</option>
+                    <option value="kimi">Kimi (Moonshot) - Free Tier Available</option>
                     <option value="local">Local/Custom</option>
                 </select>
                 <p style="font-size: 12px; color: #64748b; margin-top: 4px;" id="provider-help">Get your key from platform.openai.com</p>
@@ -229,18 +329,19 @@
             
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">API Key</label>
-                <input type="password" id="ai-api-key" class="input" placeholder="sk-..." onchange="app.saveAISettings()">
+                <input type="password" id="ai-api-key" class="input" placeholder="sk-...">
+                <p style="font-size: 11px; color: #64748b; margin-top: 4px;" id="api-key-hint">Kimi: Get free credits at platform.moonshot.cn</p>
             </div>
             
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">Model</label>
-                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, etc." onchange="app.saveAISettings()">
-                <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Deepseek: 'deepseek-chat' (V3) or 'deepseek-reasoner' (R1)</p>
+                <input type="text" id="ai-model" class="input" placeholder="gpt-4, deepseek-chat, kimi-k2, etc.">
+                <p style="font-size: 12px; color: #64748b; margin-top: 4px;">Kimi models: kimi-k2, kimi-k2-turbo, moonshot-v1-8k</p>
             </div>
             
             <div id="local-endpoint-container" class="mb-4" style="display: none;">
                 <label style="font-size: 14px; color: #94a3b8;">Custom Endpoint</label>
-                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions" onchange="app.saveAISettings()">
+                <input type="text" id="ai-endpoint" class="input" placeholder="http://localhost:11434/v1/chat/completions">
             </div>
             
             <div class="mb-4">
@@ -257,7 +358,6 @@
                 <button onclick="app.clearAllData()" class="btn btn-secondary" style="flex: 1; color: #f87171;"><i class="fas fa-trash" style="margin-right: 8px;"></i>Clear Data</button>
             </div>
             
-            <!-- Save button now properly saves all settings -->
             <button onclick="app.saveSettingsAndClose()" class="btn btn-primary" style="width: 100%; margin-top: 16px;">Save & Close</button>
         </div>
     </div>
@@ -284,6 +384,7 @@
     <div id="new-file-modal" class="modal hidden">
         <div class="modal-box" style="max-width: 320px;">
             <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 12px; color: #f8fafc;">Create New File</h3>
+            <input type="text" id="new-file-path" class="input" style="margin-bottom: 8px;" placeholder="folder/subfolder/">
             <input type="text" id="new-file-name" class="input" style="margin-bottom: 16px;" placeholder="filename.js" onkeypress="if(event.key==='Enter') app.confirmCreateFile()">
             <div style="display: flex; gap: 8px;">
                 <button onclick="app.confirmCreateFile()" class="btn btn-primary" style="flex: 1;">Create</button>
@@ -298,14 +399,15 @@
             github: { token: null, repo: null, connected: false },
             ai: { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' },
             settings: { theme: 'vs-dark', fontSize: 14, wordWrap: true },
-            chatCollapsed: false,
-            chatHeight: 220,
+            chatCollapsed: false, chatHeight: 220,
+            expandedFolders: new Set(['']),
             
             providers: {
                 openai: { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4', help: 'Get your key from platform.openai.com' },
                 anthropic: { name: 'Anthropic', baseUrl: 'https://api.anthropic.com/v1/messages', model: 'claude-3-opus-20240229', help: 'Get your key from console.anthropic.com' },
                 google: { name: 'Google', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', model: 'gemini-pro', help: 'Get your key from makersuite.google.com' },
-                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', help: 'Get your key from platform.deepseek.com' },
+                deepseek: { name: 'Deepseek', baseUrl: 'https://api.deepseek.com/chat/completions', model: 'deepseek-chat', help: 'Paid API - Get key from platform.deepseek.com' },
+                kimi: { name: 'Kimi', baseUrl: 'https://api.moonshot.cn/v1/chat/completions', model: 'kimi-k2', help: 'FREE tier available! Get key from platform.moonshot.cn' },
                 local: { name: 'Local', baseUrl: '', model: 'local-model', help: 'Enter your local endpoint URL' }
             },
 
@@ -317,8 +419,8 @@
                 this.setupAutoSave();
                 this.updateProviderUI();
                 this.setupChatResize();
+                this.setupColumnResizers();
                 
-                // Load settings into UI
                 document.getElementById('ai-provider').value = this.ai.provider;
                 document.getElementById('ai-api-key').value = this.ai.apiKey;
                 document.getElementById('ai-model').value = this.ai.model;
@@ -351,27 +453,71 @@
                 });
             },
 
-            // Chat Resize functionality
+            setupColumnResizers() {
+                // Sidebar resizer
+                const sidebarResizer = document.getElementById('sidebar-resizer');
+                const sidebar = document.getElementById('sidebar-container');
+                const appGrid = document.getElementById('app');
+                let isResizingSidebar = false;
+
+                sidebarResizer.addEventListener('mousedown', (e) => {
+                    isResizingSidebar = true;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+
+                // Preview resizer
+                const previewResizer = document.getElementById('preview-resizer');
+                const preview = document.getElementById('preview-container');
+                let isResizingPreview = false;
+
+                previewResizer.addEventListener('mousedown', (e) => {
+                    isResizingPreview = true;
+                    document.body.classList.add('resizing');
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (isResizingSidebar) {
+                        const newWidth = Math.max(150, Math.min(400, e.clientX));
+                        appGrid.style.gridTemplateColumns = `${newWidth}px 1fr 350px`;
+                        if (this.editor) this.editor.layout();
+                    }
+                    if (isResizingPreview) {
+                        const totalWidth = window.innerWidth;
+                        const newWidth = Math.max(200, Math.min(600, totalWidth - e.clientX));
+                        const sidebarWidth = sidebar.offsetWidth;
+                        const editorWidth = totalWidth - sidebarWidth - newWidth - 12; // 12px for resizers
+                        appGrid.style.gridTemplateColumns = `${sidebarWidth}px 1fr ${newWidth}px`;
+                        if (this.editor) this.editor.layout();
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isResizingSidebar || isResizingPreview) {
+                        isResizingSidebar = false;
+                        isResizingPreview = false;
+                        document.body.classList.remove('resizing');
+                    }
+                });
+            },
+
             setupChatResize() {
                 const resizer = document.getElementById('chat-resizer');
                 const panel = document.getElementById('chat-panel');
                 let isResizing = false;
-                let startY = 0;
-                let startHeight = 0;
 
                 resizer.addEventListener('mousedown', (e) => {
                     isResizing = true;
-                    startY = e.clientY;
-                    startHeight = panel.offsetHeight;
                     document.body.style.cursor = 'ns-resize';
-                    document.body.style.userSelect = 'none';
+                    document.body.classList.add('resizing');
                     e.preventDefault();
                 });
 
                 document.addEventListener('mousemove', (e) => {
                     if (!isResizing) return;
-                    const delta = startY - e.clientY;
-                    const newHeight = Math.max(100, Math.min(window.innerHeight * 0.6, startHeight + delta));
+                    const rect = panel.getBoundingClientRect();
+                    const newHeight = Math.max(100, Math.min(window.innerHeight * 0.6, window.innerHeight - e.clientY - rect.top + panel.offsetHeight));
                     panel.style.height = newHeight + 'px';
                     panel.style.flex = 'none';
                     this.chatHeight = newHeight;
@@ -382,12 +528,11 @@
                     if (isResizing) {
                         isResizing = false;
                         document.body.style.cursor = '';
-                        document.body.style.userSelect = '';
+                        document.body.classList.remove('resizing');
                     }
                 });
             },
 
-            // Properly save all AI settings
             saveAISettings() {
                 const provider = document.getElementById('ai-provider').value;
                 this.ai = {
@@ -398,10 +543,9 @@
                 };
                 this.saveToStorage();
                 this.updateProviderUI();
-                console.log('AI Settings saved:', this.ai); // Debug log
+                console.log('AI Settings saved:', this.ai);
             },
 
-            // Save settings and close modal
             saveSettingsAndClose() {
                 this.saveAISettings();
                 this.updateEditorTheme();
@@ -414,7 +558,18 @@
                 document.getElementById('provider-help').textContent = this.providers[provider].help;
                 document.getElementById('local-endpoint-container').style.display = provider === 'local' ? 'block' : 'none';
                 
-                // Auto-fill default model if empty
+                const hint = document.getElementById('api-key-hint');
+                if (provider === 'kimi') {
+                    hint.textContent = 'Kimi: Get FREE credits at platform.moonshot.cn (China) or platform.moonshot.ai (Global)';
+                    hint.style.color = '#10b981';
+                } else if (provider === 'deepseek') {
+                    hint.textContent = 'Deepseek: Requires paid credits - get key at platform.deepseek.com';
+                    hint.style.color = '#f87171';
+                } else {
+                    hint.textContent = 'Enter your API key for the selected provider';
+                    hint.style.color = '#64748b';
+                }
+                
                 const modelInput = document.getElementById('ai-model');
                 if (!modelInput.value) {
                     modelInput.value = this.providers[provider].model;
@@ -424,38 +579,164 @@
             updateProviderUI() {
                 const p = this.providers[this.ai.provider];
                 const badge = document.getElementById('active-provider');
+                const badgeClass = this.ai.provider === 'kimi' ? 'badge-kimi' : 
+                                  this.ai.provider === 'deepseek' ? 'badge-deepseek' :
+                                  this.ai.provider === 'anthropic' ? 'badge-anthropic' :
+                                  this.ai.provider === 'google' ? 'badge-google' : 'badge-openai';
+                
                 if (badge) { 
-                    badge.className = `provider-badge badge-${this.ai.provider === 'anthropic' ? 'anthropic' : this.ai.provider === 'google' ? 'google' : this.ai.provider === 'deepseek' ? 'deepseek' : 'openai'}`; 
+                    badge.className = `provider-badge ${badgeClass}`; 
                     badge.textContent = p.name; 
                     badge.style.display = 'inline-flex'; 
                 }
             },
 
-            createFile() { document.getElementById('new-file-modal').classList.remove('hidden'); document.getElementById('new-file-name').focus(); },
-            
+            // Nested File Tree with Folders
+            createFile() {
+                document.getElementById('new-file-modal').classList.remove('hidden');
+                document.getElementById('new-file-name').focus();
+            },
+
             confirmCreateFile() {
+                const path = document.getElementById('new-file-path').value.trim();
                 const name = document.getElementById('new-file-name').value.trim();
-                if (name && !this.files[name]) {
-                    this.files[name] = { content: '', type: 'file' };
-                    this.saveToStorage(); this.renderFileTree(); this.openFile(name);
-                    this.closeModal('new-file-modal'); document.getElementById('new-file-name').value = '';
+                const fullPath = path ? (path.endsWith('/') ? path + name : path + '/' + name) : name;
+                
+                if (name && !this.files[fullPath]) {
+                    // Create parent folders if they don't exist
+                    if (path) {
+                        const parts = path.split('/').filter(p => p);
+                        let currentPath = '';
+                        for (const part of parts) {
+                            currentPath = currentPath ? currentPath + '/' + part : part;
+                            if (!this.files[currentPath + '/']) {
+                                this.files[currentPath + '/'] = { content: null, type: 'folder', children: [] };
+                            }
+                        }
+                    }
+                    
+                    this.files[fullPath] = { content: '', type: 'file' };
+                    this.expandedFolders.add(path || '');
+                    this.saveToStorage(); 
+                    this.renderFileTree(); 
+                    this.openFile(fullPath);
+                    this.closeModal('new-file-modal'); 
+                    document.getElementById('new-file-path').value = '';
+                    document.getElementById('new-file-name').value = '';
                 }
             },
 
             createFolder() {
-                const name = prompt('Folder name:');
-                if (name) { this.files[name + '/'] = { content: null, type: 'folder' }; this.saveToStorage(); this.renderFileTree(); }
+                const name = prompt('Folder name (can include nested paths like "src/components"):');
+                if (name) {
+                    const parts = name.split('/').filter(p => p);
+                    let currentPath = '';
+                    for (const part of parts) {
+                        currentPath = currentPath ? currentPath + '/' + part : part;
+                        if (!this.files[currentPath + '/']) {
+                            this.files[currentPath + '/'] = { content: null, type: 'folder', children: [] };
+                        }
+                    }
+                    this.saveToStorage(); 
+                    this.renderFileTree();
+                }
+            },
+
+            toggleFolder(path) {
+                if (this.expandedFolders.has(path)) {
+                    this.expandedFolders.delete(path);
+                } else {
+                    this.expandedFolders.add(path);
+                }
+                this.renderFileTree();
+            },
+
+            renderFileTree() {
+                const container = document.getElementById('file-tree'); 
+                container.innerHTML = '';
+                
+                // Build tree structure
+                const tree = {};
+                const rootFiles = [];
+                
+                Object.keys(this.files).sort().forEach(path => {
+                    const parts = path.split('/');
+                    if (parts.length === 1 || (parts.length === 2 && parts[1] === '')) {
+                        // Root level file or folder
+                        rootFiles.push(path);
+                    }
+                });
+                
+                const renderItem = (path, depth = 0) => {
+                    const item = this.files[path];
+                    const isFolder = item.type === 'folder';
+                    const name = path.endsWith('/') ? path.slice(0, -1).split('/').pop() : path.split('/').pop();
+                    const isExpanded = this.expandedFolders.has(path);
+                    
+                    const div = document.createElement('div');
+                    div.style.paddingLeft = (depth * 12) + 'px';
+                    
+                    const content = document.createElement('div');
+                    content.className = `file-item ${this.currentFile === path ? 'active' : ''}`;
+                    
+                    let iconHtml = '';
+                    if (isFolder) {
+                        iconHtml = `<i class="fas fa-chevron-down chevron ${isExpanded ? '' : 'collapsed'}" style="width: 16px; text-align: center; font-size: 10px; color: #94a3b8;"></i>
+                                   <i class="fas fa-folder icon" style="color: #eab308;"></i>`;
+                    } else {
+                        const icon = path.endsWith('.js') ? 'fa-js' : path.endsWith('.html') ? 'fa-html5' : path.endsWith('.css') ? 'fa-css3' : 'fa-file-code';
+                        const color = path.endsWith('.js') ? '#facc15' : path.endsWith('.html') ? '#fb923c' : path.endsWith('.css') ? '#60a5fa' : '#94a3b8';
+                        iconHtml = `<span style="width: 16px; display: inline-block;"></span>
+                                   <i class="fas ${icon} icon" style="color: ${color};"></i>`;
+                    }
+                    
+                    content.innerHTML = `${iconHtml}<span class="truncate" style="flex: 1;">${name}</span>
+                        ${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${path}')" style="padding: 4px; background: transparent; border: none; cursor: pointer; opacity: 0; color: inherit;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0"><i class="fas fa-times" style="font-size: 12px;"></i></button>` : ''}`;
+                    
+                    content.onclick = () => {
+                        if (isFolder) {
+                            this.toggleFolder(path);
+                        } else {
+                            this.openFile(path);
+                        }
+                    };
+                    
+                    div.appendChild(content);
+                    container.appendChild(div);
+                    
+                    // Render children if expanded folder
+                    if (isFolder && isExpanded) {
+                        const children = Object.keys(this.files).filter(p => {
+                            if (p === path) return false;
+                            if (path === '') return p.split('/').length === 1 || (p.split('/').length === 2 && p.endsWith('/'));
+                            return p.startsWith(path) && p !== path;
+                        }).sort();
+                        
+                        // Filter direct children only
+                        const directChildren = children.filter(p => {
+                            const relative = p.slice(path.length);
+                            const parts = relative.split('/').filter(x => x);
+                            return parts.length === 1 || (parts.length === 2 && p.endsWith('/'));
+                        });
+                        
+                        directChildren.forEach(child => renderItem(child, depth + 1));
+                    }
+                };
+                
+                // Render root items
+                rootFiles.forEach(path => renderItem(path));
             },
 
             openFile(filename) {
                 if (this.files[filename]?.type === 'folder') return;
-                this.currentFile = filename; document.getElementById('empty-state').style.display = 'none';
+                this.currentFile = filename; 
+                document.getElementById('empty-state').style.display = 'none';
                 if (this.editor) {
                     const model = monaco.editor.createModel(this.files[filename]?.content || '', this.getLanguage(filename));
                     this.editor.setModel(model);
                 }
-                this.renderTabs(); this.renderFileTree();
-                if (this.isPreviewable(filename)) this.updatePreview();
+                this.renderTabs(); 
+                this.renderFileTree();
             },
 
             closeFile(filename) {
@@ -466,7 +747,9 @@
                     if (this.currentFile) this.openFile(this.currentFile);
                     else { if (this.editor) this.editor.setValue(''); document.getElementById('empty-state').style.display = 'flex'; }
                 }
-                this.saveToStorage(); this.renderTabs(); this.renderFileTree();
+                this.saveToStorage(); 
+                this.renderTabs(); 
+                this.renderFileTree();
             },
 
             getLanguage(filename) {
@@ -475,54 +758,33 @@
                 return map[ext] || 'plaintext';
             },
 
-            isPreviewable(filename) { return filename.endsWith('.html') || filename.endsWith('.htm'); },
-
-            renderFileTree() {
-                const container = document.getElementById('file-tree'); container.innerHTML = '';
-                Object.keys(this.files).sort().forEach(filename => {
-                    const div = document.createElement('div');
-                    div.className = `file-item ${this.currentFile === filename ? 'active' : ''}`;
-                    const isFolder = this.files[filename].type === 'folder';
-                    const icon = isFolder ? 'fa-folder' : (filename.endsWith('.js') ? 'fa-js' : filename.endsWith('.html') ? 'fa-html5' : filename.endsWith('.css') ? 'fa-css3' : 'fa-file-code');
-                    const color = isFolder ? 'color: #eab308;' : filename.endsWith('.js') ? 'color: #facc15;' : filename.endsWith('.html') ? 'color: #fb923c;' : filename.endsWith('.css') ? 'color: #60a5fa;' : 'color: #94a3b8;';
-                    div.innerHTML = `<i class="fas ${icon}" style="width: 16px; text-align: center; font-size: 12px; ${color}"></i><span class="truncate" style="flex: 1;">${filename}</span>${!isFolder ? `<button onclick="event.stopPropagation(); app.closeFile('${filename}')" style="padding: 4px; background: transparent; border: none; cursor: pointer; opacity: 0; color: inherit;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0"><i class="fas fa-times" style="font-size: 12px;"></i></button>` : ''}`;
-                    div.onclick = () => this.openFile(filename); div.classList.add('group'); container.appendChild(div);
-                });
+            isPreviewable(filename) { 
+                return filename.endsWith('.html') || filename.endsWith('.htm'); 
             },
 
             renderTabs() {
-                const container = document.getElementById('tabs-container'); container.innerHTML = '';
+                const container = document.getElementById('tabs-container'); 
+                container.innerHTML = '';
                 Object.keys(this.files).filter(f => this.files[f].type !== 'folder').forEach(filename => {
-                    const tab = document.createElement('div'); tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
+                    const tab = document.createElement('div'); 
+                    tab.className = `tab ${this.currentFile === filename ? 'active' : ''}`;
                     const icon = filename.endsWith('.js') ? 'fa-js' : filename.endsWith('.html') ? 'fa-html5' : filename.endsWith('.css') ? 'fa-css3' : 'fa-file-code';
-                    tab.innerHTML = `<i class="fas ${icon}" style="font-size: 12px;"></i><span class="truncate" style="max-width: 100px;">${filename}</span><button onclick="event.stopPropagation(); app.closeFile('${filename}')" style="margin-left: 4px; background: transparent; border: none; cursor: pointer; color: inherit;"><i class="fas fa-times" style="font-size: 12px;"></i></button>`;
-                    tab.onclick = () => this.openFile(filename); container.appendChild(tab);
+                    const showPreview = this.isPreviewable(filename);
+                    tab.innerHTML = `<i class="fas ${icon}" style="font-size: 12px;"></i>
+                        <span class="truncate" style="max-width: 100px;">${filename.split('/').pop()}</span>
+                        ${showPreview ? `<button class="preview-btn" onclick="event.stopPropagation(); app.previewFile('${filename}')" title="Preview"><i class="fas fa-eye"></i></button>` : ''}
+                        <button onclick="event.stopPropagation(); app.closeFile('${filename}')" style="margin-left: 4px; background: transparent; border: none; cursor: pointer; color: inherit;"><i class="fas fa-times" style="font-size: 12px;"></i></button>`;
+                    tab.onclick = () => this.openFile(filename); 
+                    container.appendChild(tab);
                 });
             },
 
-            createCheckpoint() {
-                const checkpoint = { id: Date.now(), timestamp: new Date().toISOString(), message: `Checkpoint ${this.versions.length + 1}`, files: JSON.parse(JSON.stringify(this.files)) };
-                this.versions.unshift(checkpoint); if (this.versions.length > 20) this.versions.pop();
-                this.saveToStorage(); this.renderVersions(); this.showToast('Checkpoint saved!');
-            },
-
-            restoreVersion(id) {
-                const version = this.versions.find(v => v.id === id);
-                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
-                    this.createCheckpoint(); this.files = JSON.parse(JSON.stringify(version.files));
-                    this.saveToStorage(); this.renderFileTree();
-                    if (this.currentFile && this.files[this.currentFile]) this.openFile(this.currentFile);
-                    this.showToast('Version restored!');
-                }
-            },
-
-            renderVersions() {
-                const container = document.getElementById('version-list'); container.innerHTML = '';
-                this.versions.forEach((version, index) => {
-                    const div = document.createElement('div'); div.className = 'version-item'; div.onclick = () => this.restoreVersion(version.id);
-                    div.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center;"><div class="version-dot ${index === 0 ? 'active' : ''}"></div>${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}</div><div style="flex: 1; min-width: 0;"><div class="truncate" style="font-size: 12px; font-weight: 600; color: #e2e8f0;">${version.message}</div><div style="font-size: 12px; color: #64748b;">${new Date(version.timestamp).toLocaleString()}</div></div>`;
-                    container.appendChild(div);
-                });
+            // Preview any HTML file
+            previewFile(filename) {
+                this.currentFile = filename;
+                this.openFile(filename);
+                this.updatePreview();
+                this.showToast(`Previewing ${filename.split('/').pop()}`);
             },
 
             updatePreview() {
@@ -532,7 +794,9 @@
                 document.getElementById('preview-frame').src = URL.createObjectURL(blob);
             },
 
-            refreshPreview() { this.updatePreview(); },
+            refreshPreview() { 
+                this.updatePreview(); 
+            },
 
             openPreviewInNewTab() {
                 if (this.currentFile && this.isPreviewable(this.currentFile)) {
@@ -546,7 +810,6 @@
                 const message = input.value.trim(); 
                 if (!message) return;
                 
-                // Verify API key is configured
                 if (!this.ai.apiKey && this.ai.provider !== 'local') {
                     this.addChatMessage(`Please configure your ${this.providers[this.ai.provider].name} API key in Settings first.`, 'ai');
                     return;
@@ -578,10 +841,19 @@
                 
                 let url, body, headers;
 
-                if (provider === 'openai' || provider === 'deepseek') {
+                if (provider === 'openai' || provider === 'deepseek' || provider === 'kimi') {
+                    // Kimi uses OpenAI-compatible format
                     url = config.baseUrl; 
                     headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ model: model || config.model, messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }], temperature: 0.7, max_tokens: 4096 });
+                    body = JSON.stringify({ 
+                        model: model || config.model, 
+                        messages: [
+                            { role: 'system', content: 'You are a helpful coding assistant.' }, 
+                            { role: 'user', content: context }
+                        ], 
+                        temperature: 0.7, 
+                        max_tokens: 4096 
+                    });
                 } else if (provider === 'anthropic') {
                     url = config.baseUrl; 
                     headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
@@ -599,7 +871,7 @@
                 const response = await fetch(url, { method: 'POST', headers, body });
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`API Error: ${response.status} - ${errorText}`);
+                    throw new Error(`${response.status}: ${errorText}`);
                 }
                 
                 const data = await response.json();
@@ -728,6 +1000,7 @@
             },
 
             toggleSettings() { 
+                this.updateProviderHelp();
                 document.getElementById('settings-modal').classList.remove('hidden'); 
             },
 
@@ -737,8 +1010,41 @@
                 this.saveToStorage(); 
             },
 
+            createCheckpoint() {
+                const checkpoint = { id: Date.now(), timestamp: new Date().toISOString(), message: `Checkpoint ${this.versions.length + 1}`, files: JSON.parse(JSON.stringify(this.files)) };
+                this.versions.unshift(checkpoint); 
+                if (this.versions.length > 20) this.versions.pop();
+                this.saveToStorage(); 
+                this.renderVersions(); 
+                this.showToast('Checkpoint saved!');
+            },
+
+            restoreVersion(id) {
+                const version = this.versions.find(v => v.id === id);
+                if (version && confirm('Restore this version? Current changes will be saved as a new checkpoint.')) {
+                    this.createCheckpoint(); 
+                    this.files = JSON.parse(JSON.stringify(version.files));
+                    this.saveToStorage(); 
+                    this.renderFileTree();
+                    if (this.currentFile && this.files[this.currentFile]) this.openFile(this.currentFile);
+                    this.showToast('Version restored!');
+                }
+            },
+
+            renderVersions() {
+                const container = document.getElementById('version-list'); 
+                container.innerHTML = '';
+                this.versions.forEach((version, index) => {
+                    const div = document.createElement('div'); 
+                    div.className = 'version-item'; 
+                    div.onclick = () => this.restoreVersion(version.id);
+                    div.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center;"><div class="version-dot ${index === 0 ? 'active' : ''}"></div>${index < this.versions.length - 1 ? '<div class="version-line"></div>' : ''}</div><div style="flex: 1; min-width: 0;"><div class="truncate" style="font-size: 12px; font-weight: 600; color: #e2e8f0;">${version.message}</div><div style="font-size: 12px; color: #64748b;">${new Date(version.timestamp).toLocaleString()}</div></div>`;
+                    container.appendChild(div);
+                });
+            },
+
             saveToStorage() { 
-                localStorage.setItem('devstudio_data', JSON.stringify({ files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings })); 
+                localStorage.setItem('devstudio_data', JSON.stringify({ files: this.files, versions: this.versions, github: this.github, ai: this.ai, settings: this.settings, expandedFolders: Array.from(this.expandedFolders) })); 
             },
 
             loadFromStorage() {
@@ -749,10 +1055,18 @@
                     this.versions = parsed.versions || []; 
                     this.github = parsed.github || { token: null, repo: null, connected: false }; 
                     this.ai = parsed.ai || { provider: 'openai', apiKey: '', model: 'gpt-4', endpoint: '' }; 
-                    this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true }; 
+                    this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 14, wordWrap: true };
+                    this.expandedFolders = new Set(parsed.expandedFolders || ['']);
                 }
                 else {
-                    this.files = { 'index.html': { content: `<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }\nh1 { font-size: 3rem; }\n.card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }\n</style>\n</head>\n<body>\n<h1>Welcome to DevStudio</h1>\n<div class="card">\n<h2>Getting Started</h2>\n<ul>\n<li>Edit files in the left sidebar</li>\n<li>Use the AI chat for help</li>\n<li>Save checkpoints to track changes</li>\n<li>Connect GitHub to sync</li>\n</ul>\n</div>\n</body>\n</html>`, type: 'file' }, 'style.css': { content: '/* Add your styles here */', type: 'file' }, 'script.js': { content: '// Add your JavaScript here', type: 'file' } };
+                    this.files = { 
+                        'index.html': { content: `<!DOCTYPE html>\n<html>\n<head>\n<style>\nbody { font-family: system-ui; max-width: 800px; margin: 0 auto; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; min-height: 100vh; }\nh1 { font-size: 3rem; }\n.card { background: rgba(255,255,255,0.1); padding: 2rem; border-radius: 1rem; margin-top: 2rem; }\n</style>\n</head>\n<body>\n<h1>Welcome to DevStudio</h1>\n<div class="card">\n<h2>Getting Started</h2>\n<ul>\n<li>Edit files in the left sidebar</li>\n<li>Use the AI chat for help</li>\n<li>Drag borders to resize panels</li>\n<li>Click the eye icon on any HTML tab to preview</li>\n</ul>\n</div>\n</body>\n</html>`, type: 'file' }, 
+                        'src/style.css': { content: '/* Styles */', type: 'file' },
+                        'src/app.js': { content: '// JavaScript', type: 'file' },
+                        'src/': { content: null, type: 'folder' }
+                    };
+                    this.expandedFolders.add('');
+                    this.expandedFolders.add('src/');
                     this.createCheckpoint();
                 }
             },
