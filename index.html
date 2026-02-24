@@ -394,7 +394,7 @@
         </div>
     </div>
 
-    <!-- MODIFIED: Settings Modal with Dynamic Model Dropdown -->
+    <!-- Settings Modal with Dynamic Model Dropdown -->
     <div id="settings-modal" class="modal hidden">
         <div class="modal-box">
             <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 16px; color: #f8fafc;">Settings</h2>
@@ -409,7 +409,6 @@
             
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">AI Provider</label>
-                <!-- MODIFIED: Added onchange handler to update models -->
                 <select id="ai-provider" class="input" onchange="app.handleProviderChange()">
                     <option value="openai">OpenAI (GPT-4) - Recommended</option>
                     <option value="anthropic">Anthropic (Claude)</option>
@@ -427,7 +426,7 @@
                 <p style="font-size: 11px; color: #64748b; margin-top: 4px;" id="api-key-hint">Enter your API key</p>
             </div>
             
-            <!-- NEW: Dynamic Model Dropdown -->
+            <!-- Dynamic Model Dropdown -->
             <div class="mb-4">
                 <label style="font-size: 14px; color: #94a3b8;">Model</label>
                 <select id="ai-model" class="input">
@@ -500,7 +499,7 @@
             expandedFolders: new Set(['']),
             currentFolder: '',
             
-            // NEW: Provider configurations with available models
+            // Provider configurations with available models - UPDATED with Gemini 2.0 Flash
             providers: {
                 openai: { 
                     name: 'OpenAI', 
@@ -521,9 +520,10 @@
                 google: { 
                     name: 'Google', 
                     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent', 
-                    models: ['gemini-pro', 'gemini-1.5-pro-latest'],
-                    defaultModel: 'gemini-pro',
-                    help: 'Get key from makersuite.google.com', 
+                    // ADDED: gemini-2.0-flash-exp as first option (latest/fastest)
+                    models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro-latest', 'gemini-pro'],
+                    defaultModel: 'gemini-2.0-flash-exp',
+                    help: 'Get key from aistudio.google.com. 2.0 Flash is the latest fast model.', 
                     cors: false 
                 },
                 deepseek: { 
@@ -568,7 +568,7 @@
                 document.getElementById('ai-api-key').value = this.ai.apiKey;
                 document.getElementById('ai-endpoint').value = this.ai.endpoint;
                 
-                // NEW: Initialize model dropdown
+                // Initialize model dropdown
                 this.handleProviderChange();
                 document.getElementById('ai-model').value = this.ai.model;
                 
@@ -728,7 +728,7 @@
                 this.renderFileTree();
             },
 
-            // NEW: Handle provider change - update model dropdown
+            // Handle provider change - update model dropdown
             handleProviderChange() {
                 const provider = document.getElementById('ai-provider').value;
                 const modelSelect = document.getElementById('ai-model');
@@ -1138,6 +1138,7 @@
                     headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
                     body = JSON.stringify({ model: model || config.defaultModel, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
                 } else if (provider === 'google') {
+                    // UPDATED: Use the correct model name in the URL
                     url = `https://generativelanguage.googleapis.com/v1beta/models/${model || config.defaultModel}:generateContent?key=${apiKey}`;
                     headers = { 'Content-Type': 'application/json' };
                     body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
