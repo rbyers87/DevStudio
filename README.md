@@ -1,4 +1,4 @@
-# DevStudio1
+# DevStudio
 I've created DevStudio, a comprehensive browser-based development environment that replicates the core features of Lovable.dev. Here's what I've built for you:
 Key Features
 🗂️ File Management
