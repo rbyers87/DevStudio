@@ -1112,53 +1112,97 @@
                 }
             },
 
-            async callAI(message) {
-                const { provider, apiKey, model, endpoint } = this.ai;
-                const config = this.providers[provider];
-                
-                const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
-                const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\n${currentCode}\n\nUser request: ${message}`;
-                
-                let url, body, headers;
-
-                if (provider === 'openai' || provider === 'deepseek' || provider === 'kimi') {
-                    url = config.baseUrl;
-                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({
-                        model: model || config.defaultModel,
-                        messages: [
-                            { role: 'system', content: 'You are a helpful coding assistant.' },
-                            { role: 'user', content: context }
-                        ],
-                        temperature: 0.7,
-                        max_tokens: 4096
-                    });
-                } else if (provider === 'anthropic') {
-                    url = config.baseUrl;
-                    headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-                    body = JSON.stringify({ model: model || config.defaultModel, max_tokens: 4096, messages: [{ role: 'user', content: context }] });
-                } else if (provider === 'google') {
-                    // UPDATED: Use the correct model name in the URL
-                    url = `https://generativelanguage.googleapis.com/v1beta/models/${model || config.defaultModel}:generateContent?key=${apiKey}`;
-                    headers = { 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ contents: [{ parts: [{ text: context }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } });
-                } else {
-                    url = endpoint;
-                    headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-                    body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
+async callAI(message) {
+    const { provider, apiKey, model, endpoint } = this.ai;
+    const config = this.providers[provider];
+    
+    const currentCode = this.currentFile ? this.files[this.currentFile]?.content || '' : '';
+    const context = `Current file: ${this.currentFile || 'none'}\n\nCode:\n${currentCode}\n\nUser request: ${message}`;
+    
+    // Handle Local/Ollama provider
+    if (provider === 'local') {
+        const ollamaUrl = endpoint || 'http://localhost:11434';
+        
+        console.log(`Calling Ollama with model: ${model}`);
+        
+        // Use native Ollama API (works with Gemma 4)
+        const response = await fetch(`${ollamaUrl}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: model,
+                prompt: context,
+                stream: false,
+                options: { 
+                    temperature: 0.7,
+                    num_predict: 4096,
+                    stop: ["<end_of_turn>"]  // Gemma-specific stop token
                 }
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Ollama error (${response.status}): ${errorText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Clean up Gemma's response if needed
+        let reply = data.response;
+        reply = reply.replace(/<\/?s>/g, '');  // Remove special tokens
+        return reply;
+    }
+    
+    // Handle OpenAI-compatible providers
+    let url, body, headers;
 
-                const response = await fetch(url, { method: 'POST', headers, body });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`${response.status}: ${errorText}`);
-                }
-                
-                const data = await response.json();
-                if (provider === 'anthropic') return data.content[0].text;
-                if (provider === 'google') return data.candidates[0].content.parts[0].text;
-                return data.choices[0].message.content;
-            },
+    if (provider === 'openai' || provider === 'deepseek' || provider === 'kimi') {
+        url = config.baseUrl;
+        headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+        body = JSON.stringify({
+            model: model || config.defaultModel,
+            messages: [
+                { role: 'system', content: 'You are a helpful coding assistant.' },
+                { role: 'user', content: context }
+            ],
+            temperature: 0.7,
+            max_tokens: 4096
+        });
+    } else if (provider === 'anthropic') {
+        url = config.baseUrl;
+        headers = { 'x-api-key': apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
+        body = JSON.stringify({ 
+            model: model || config.defaultModel, 
+            max_tokens: 4096, 
+            messages: [{ role: 'user', content: context }] 
+        });
+    } else if (provider === 'google') {
+        url = `https://generativelanguage.googleapis.com/v1beta/models/${model || config.defaultModel}:generateContent?key=${apiKey}`;
+        headers = { 'Content-Type': 'application/json' };
+        body = JSON.stringify({ 
+            contents: [{ parts: [{ text: context }] }], 
+            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 } 
+        });
+    } else {
+        // Fallback for other local endpoints
+        url = endpoint;
+        headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+        body = JSON.stringify({ model: model, messages: [{ role: 'user', content: context }] });
+    }
+
+    const response = await fetch(url, { method: 'POST', headers, body });
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    if (provider === 'anthropic') return data.content[0].text;
+    if (provider === 'google') return data.candidates[0].content.parts[0].text;
+    if (provider === 'local') return data.response;  // Already handled above
+    return data.choices[0].message.content;
+}
 
             addChatMessage(text, sender) {
                 const container = document.getElementById('chat-messages');
