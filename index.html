@@ -1075,42 +1075,50 @@
                 }
             },
 
-            async sendMessage() {
-                const input = document.getElementById('chat-input');
-                const message = input.value.trim();
-                if (!message) return;
-                
-                if (!this.ai.apiKey && this.ai.provider !== 'local') {
-                    this.addChatMessage(`Please configure your ${this.providers[this.ai.provider].name} API key in Settings first.`, 'ai');
-                    return;
+async sendMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message) return;
+    
+    // For local provider, we don't need an API key
+    if (this.ai.provider !== 'local' && !this.ai.apiKey) {
+        this.addChatMessage(`Please configure your ${this.providers[this.ai.provider].name} API key in Settings first.`, 'ai');
+        return;
+    }
+    
+    this.addChatMessage(message, 'user');
+    input.value = '';
+    document.getElementById('ai-status').textContent = 'Thinking...';
+    
+    try {
+        const response = await this.callAI(message);
+        this.addChatMessage(response, 'ai');
+        if (response.includes('```')) {
+            this.addChatMessage('Click <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer;">Apply Changes</button> to update the file.', 'ai');
+        }
+    } catch (error) {
+        let errorMsg = error.message;
+        if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+            if (this.ai.provider === 'local') {
+                errorMsg = `Cannot connect to Ollama. Please ensure:
+1. Ollama is running (check system tray)
+2. Model '${this.ai.model}' is installed (run 'ollama list' to check)
+3. You're using Chrome with --disable-web-security or a CORS proxy`;
+            } else {
+                const provider = this.providers[this.ai.provider];
+                if (provider.cors) {
+                    errorMsg = `CORS Error: ${this.ai.provider} blocks browser requests. Try using a CORS extension, proxy server, or switch to Local/Ollama.`;
+                } else {
+                    errorMsg = 'Network error. Check your API key and internet connection.';
                 }
-                
-                this.addChatMessage(message, 'user');
-                input.value = '';
-                document.getElementById('ai-status').textContent = 'Thinking...';
-                
-                try {
-                    const response = await this.callAI(message);
-                    this.addChatMessage(response, 'ai');
-                    if (response.includes('```')) {
-                        this.addChatMessage('Click <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer;">Apply Changes</button> to update the file.', 'ai');
-                    }
-                } catch (error) {
-                    let errorMsg = error.message;
-                    if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
-                        const provider = this.providers[this.ai.provider];
-                        if (provider.cors) {
-                            errorMsg = `CORS Error: ${this.ai.provider} blocks browser requests. Try using a CORS extension, proxy server, or switch to OpenAI/Local.`;
-                        } else {
-                            errorMsg = 'Network error. Check your API key and internet connection.';
-                        }
-                    }
-                    this.addChatMessage('Error: ' + errorMsg, 'ai');
-                    console.error('AI Error:', error);
-                } finally {
-                    document.getElementById('ai-status').textContent = 'Ready';
-                }
-            },
+            }
+        }
+        this.addChatMessage('Error: ' + errorMsg, 'ai');
+        console.error('AI Error:', error);
+    } finally {
+        document.getElementById('ai-status').textContent = 'Ready';
+    }
+},
 
 async callAI(message) {
     const { provider, apiKey, model, endpoint } = this.ai;
