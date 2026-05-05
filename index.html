@@ -1125,33 +1125,37 @@ async callAI(message) {
         
         console.log(`Calling Ollama with model: ${model}`);
         
-        // Use native Ollama API (works with Gemma 4)
-        const response = await fetch(`${ollamaUrl}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: model,
-                prompt: context,
-                stream: false,
-                options: { 
-                    temperature: 0.7,
-                    num_predict: 4096,
-                    stop: ["<end_of_turn>"]  // Gemma-specific stop token
-                }
-            })
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama error (${response.status}): ${errorText}`);
+        try {
+            // Use native Ollama API (works with Gemma 4)
+            const response = await fetch(`${ollamaUrl}/api/generate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: model,
+                    prompt: context,
+                    stream: false,
+                    options: { 
+                        temperature: 0.7,
+                        num_predict: 4096
+                    }
+                })
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Ollama error (${response.status}): ${errorText}`);
+            }
+            
+            const data = await response.json();
+            
+            // Clean up response if needed
+            let reply = data.response || '';
+            reply = reply.replace(/<\/?s>/g, '');  // Remove special tokens
+            return reply || "I'm sorry, I couldn't generate a response.";
+        } catch (error) {
+            console.error('Ollama error:', error);
+            throw new Error(`Failed to connect to Ollama. Make sure Ollama is running and model '${model}' is installed. Error: ${error.message}`);
         }
-        
-        const data = await response.json();
-        
-        // Clean up Gemma's response if needed
-        let reply = data.response;
-        reply = reply.replace(/<\/?s>/g, '');  // Remove special tokens
-        return reply;
     }
     
     // Handle OpenAI-compatible providers
@@ -1200,7 +1204,6 @@ async callAI(message) {
     const data = await response.json();
     if (provider === 'anthropic') return data.content[0].text;
     if (provider === 'google') return data.candidates[0].content.parts[0].text;
-    if (provider === 'local') return data.response;  // Already handled above
     return data.choices[0].message.content;
 }
 
