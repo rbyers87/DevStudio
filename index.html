@@ -119,7 +119,15 @@
             border-color: #3b82f6;
         }
         
-        .editor-section { grid-area: editor; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; min-width: 0; }
+        .editor-section { 
+            grid-area: editor; 
+            display: flex; 
+            flex-direction: column; 
+            background: #0f172a; 
+            overflow: hidden; 
+            min-width: 0;
+            min-height: 0; /* Critical for flex children */
+        }
         
         .tabs-bar { 
             height: 38px; 
@@ -129,6 +137,7 @@
             overflow-x: auto; 
             gap: 2px;
             padding: 0 4px;
+            flex-shrink: 0;
         }
         
         .tab { 
@@ -166,8 +175,24 @@
         
         .tab:hover .preview-btn, .tab.active .preview-btn { display: inline-block; }
         
-        .editor-container { flex: 1; position: relative; overflow: hidden; min-height: 0; background: #0f172a; }
-        #monaco-editor { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+        .editor-container { 
+            flex: 1; 
+            position: relative; 
+            overflow: hidden; 
+            min-height: 0; 
+            background: #0f172a;
+            width: 100%;
+        }
+        
+        #monaco-editor { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            right: 0; 
+            bottom: 0; 
+            height: 100%;
+            width: 100%;
+        }
         
         .chat-panel {
             height: 260px;
@@ -178,6 +203,7 @@
             display: flex;
             flex-direction: column;
             position: relative;
+            flex-shrink: 0;
         }
         
         .chat-resizer { 
@@ -203,6 +229,7 @@
             cursor: pointer; 
             background: #252f47; 
             user-select: none;
+            flex-shrink: 0;
         }
         
         .chat-messages { 
@@ -218,6 +245,7 @@
             padding: 16px; 
             border-top: 1px solid #334155;
             background: #1e293b;
+            flex-shrink: 0;
         }
         
         .chat-bubble { 
@@ -275,6 +303,7 @@
             justify-content: space-between; 
             border-bottom: 1px solid #334155; 
             background: #1e293b;
+            flex-shrink: 0;
         }
         
         .preview-content { flex: 1; position: relative; background: white; overflow: hidden; }
@@ -478,6 +507,7 @@
             background: #0f172a;
             flex-direction: column;
             gap: 12px;
+            z-index: 10;
         }
         
         .toast { 
@@ -795,7 +825,8 @@
                     models: ['deepseek-chat', 'deepseek-coder'],
                     defaultModel: 'deepseek-chat',
                     help: 'Paid API - get key from platform.deepseek.com', 
-                    needsKey: true 
+                    needsKey: true,
+                    cors: true
                 },
                 kimi: { 
                     name: 'Kimi', 
@@ -803,7 +834,8 @@
                     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
                     defaultModel: 'moonshot-v1-8k',
                     help: 'FREE tier but may have CORS issues', 
-                    needsKey: true 
+                    needsKey: true,
+                    cors: true
                 },
                 local: { 
                     name: 'Local Ollama', 
@@ -837,7 +869,7 @@
                 this.showToast('DevStudio Ready! Ollama integration active.');
                 
                 // Test Ollama connection on load
-                this.testOllamaConnection();
+                setTimeout(() => this.testOllamaConnection(), 500);
             },
             
             setupEventListeners() {
@@ -846,23 +878,66 @@
                         this.saveToStorage();
                     }
                 });
+                
+                // Window resize handler for Monaco
+                window.addEventListener('resize', () => {
+                    if (this.editor) {
+                        this.editor.layout();
+                    }
+                });
             },
             
             async testOllamaConnection() {
                 if (this.ai.provider === 'local') {
                     try {
-                        const response = await fetch(`${this.ai.endpoint}/api/tags`);
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 3000);
+                        
+                        const response = await fetch(`${this.ai.endpoint}/api/tags`, {
+                            method: 'GET',
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
                         if (response.ok) {
                             const data = await response.json();
-                            this.showToast(`✅ Ollama connected! Available models: ${data.models?.map(m => m.name).join(', ') || 'unknown'}`);
+                            const models = data.models?.map(m => m.name).join(', ') || 'unknown';
+                            this.showToast(`✅ Ollama connected! Available: ${models}`);
+                            this.addChatMessage(`✅ Successfully connected to Ollama at ${this.ai.endpoint}\nAvailable models: ${models}`, 'system');
                         } else {
-                            this.showToast('⚠️ Ollama running but check model availability', 4000);
+                            this.showOllamaNotRunningMessage();
                         }
                     } catch (error) {
                         console.warn('Ollama not reachable:', error);
-                        this.addChatMessage('⚠️ Ollama not detected. Please ensure Ollama is running with `ollama serve` and model installed.', 'system');
+                        this.showOllamaNotRunningMessage();
                     }
                 }
+            },
+            
+            showOllamaNotRunningMessage() {
+                const isWindows = navigator.platform.includes('Win');
+                const isMac = navigator.platform.includes('Mac');
+                
+                let instructions = '';
+                if (isWindows) {
+                    instructions = `1. Download Ollama from https://ollama.com/download/windows\n2. Install and run Ollama\n3. Open Command Prompt and run: ollama pull gemma4:latest\n4. Restart DevStudio`;
+                } else if (isMac) {
+                    instructions = `1. Run: brew install ollama\n2. Run: ollama serve\n3. In another terminal: ollama pull gemma4:latest\n4. Restart DevStudio`;
+                } else {
+                    instructions = `1. Run: curl -fsSL https://ollama.com/install.sh | sh\n2. Run: ollama serve\n3. In another terminal: ollama pull gemma4:latest\n4. Restart DevStudio`;
+                }
+                
+                this.addChatMessage(
+                    `⚠️ **Ollama is not running**\n\n` +
+                    `To use the AI assistant locally:\n${instructions}\n\n` +
+                    `Alternatively, you can:\n` +
+                    `• Use OpenAI/Gemini in Settings (requires API key)\n` +
+                    `• Check Ollama endpoint in Settings (default: http://localhost:11434)`,
+                    'system'
+                );
+                
+                this.showToast('⚠️ Ollama not running - check chat for setup instructions', 5000);
             },
 
             initMonaco() {
@@ -896,6 +971,11 @@
                             }, 800);
                         }
                     });
+                    
+                    // Force layout after editor is created
+                    setTimeout(() => {
+                        if (this.editor) this.editor.layout();
+                    }, 100);
                 });
             },
 
@@ -1340,6 +1420,7 @@
                     const language = this.getLanguage(filename);
                     const model = monaco.editor.createModel(content, language);
                     this.editor.setModel(model);
+                    setTimeout(() => this.editor.layout(), 50);
                 }
                 
                 this.renderTabs();
@@ -1521,6 +1602,36 @@
                 if (provider === 'local') {
                     const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
                     const finalModel = model || 'gemma4:latest';
+                    
+                    // Check if Ollama is reachable first
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 2000);
+                        
+                        const testResponse = await fetch(`${ollamaUrl}/api/tags`, {
+                            method: 'GET',
+                            signal: controller.signal
+                        });
+                        
+                        clearTimeout(timeoutId);
+                        
+                        if (!testResponse.ok) {
+                            throw new Error(`Ollama server not responding at ${ollamaUrl}`);
+                        }
+                        
+                        const tagsData = await testResponse.json();
+                        const modelExists = tagsData.models?.some(m => m.name === finalModel);
+                        
+                        if (!modelExists) {
+                            const availableModels = tagsData.models?.map(m => m.name).join(', ') || 'none';
+                            throw new Error(`Model '${finalModel}' not found. Available: ${availableModels}\n\nRun: ollama pull ${finalModel}`);
+                        }
+                    } catch (testError) {
+                        if (testError.name === 'AbortError') {
+                            throw new Error(`Ollama timeout at ${ollamaUrl}\n\nMake sure Ollama is running:\n• Windows: Check system tray\n• Mac/Linux: Run 'ollama serve'\n\nThen run: ollama pull ${finalModel}`);
+                        }
+                        throw testError;
+                    }
                     
                     console.log(`Calling Ollama: ${ollamaUrl}/api/generate with model ${finalModel}`);
                     
