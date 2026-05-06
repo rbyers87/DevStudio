@@ -119,92 +119,49 @@
             border-color: #3b82f6;
         }
         
-        .editor-section { 
-            grid-area: editor; 
-            display: flex; 
-            flex-direction: column; 
-            background: #0f172a; 
-            overflow: hidden; 
-            min-width: 0;
-            min-height: 0; /* Critical for flex children */
-        }
-        
-        .tabs-bar { 
-            height: 38px; 
-            background: #1e293b; 
-            border-bottom: 1px solid #334155; 
-            display: flex; 
-            overflow-x: auto; 
-            gap: 2px;
-            padding: 0 4px;
-            flex-shrink: 0;
-        }
-        
-        .tab { 
-            height: 38px; 
-            padding: 0 14px; 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
-            cursor: pointer; 
-            font-size: 13px; 
-            background: #1e293b; 
-            color: #94a3b8; 
-            white-space: nowrap;
-            border-right: 1px solid #334155;
-            transition: all 0.2s;
-        }
-        
-        .tab.active { 
-            background: #334155; 
-            color: #f8fafc; 
-            border-top: 2px solid #3b82f6;
-        }
-        
-        .tab .preview-btn { 
-            margin-left: 6px; 
-            padding: 2px 6px; 
-            background: #10b981; 
-            color: white; 
-            border-radius: 4px; 
-            font-size: 9px; 
-            border: none; 
-            cursor: pointer;
-            display: none;
-        }
-        
-        .tab:hover .preview-btn, .tab.active .preview-btn { display: inline-block; }
-        
-        .editor-container { 
-            flex: 1; 
-            position: relative; 
-            overflow: hidden; 
-            min-height: 0; 
-            background: #0f172a;
-            width: 100%;
-        }
-        
-        #monaco-editor { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            right: 0; 
-            bottom: 0; 
-            height: 100%;
-            width: 100%;
-        }
-        
-        .chat-panel {
-            height: 260px;
-            min-height: 48px;
-            max-height: 60vh;
-            border-top: 1px solid #334155;
-            background: #1e293b;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            flex-shrink: 0;
-        }
+.editor-section { 
+    grid-area: editor; 
+    display: flex; 
+    flex-direction: column; 
+    background: #0f172a; 
+    overflow: hidden; 
+    min-width: 0;
+    min-height: 0;
+    height: 100%; /* Ensure full height */
+}
+
+.tabs-bar { 
+    height: 38px; 
+    background: #1e293b; 
+    border-bottom: 1px solid #334155; 
+    display: flex; 
+    overflow-x: auto; 
+    gap: 2px;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+
+.editor-container { 
+    flex: 1; 
+    position: relative; 
+    overflow: hidden; 
+    min-height: 200px; /* Minimum height before chat takes over */
+    background: #0f172a;
+    width: 100%;
+}
+
+.chat-panel {
+    height: 280px; /* Fixed height, not percentage */
+    min-height: 120px;
+    max-height: 500px;
+    border-top: 1px solid #334155;
+    background: #1e293b;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden; /* Prevent overflow */
+}
         
         .chat-resizer { 
             height: 6px; 
@@ -232,21 +189,35 @@
             flex-shrink: 0;
         }
         
-        .chat-messages { 
-            flex: 1; 
-            overflow-y: auto; 
-            padding: 16px; 
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        
-        .chat-input-area { 
-            padding: 16px; 
-            border-top: 1px solid #334155;
-            background: #1e293b;
-            flex-shrink: 0;
-        }
+.chat-messages { 
+    flex: 1; 
+    overflow-y: auto; 
+    padding: 16px; 
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 100px;
+    max-height: calc(100% - 80px); /* Leave room for input area */
+}
+
+.chat-input-area { 
+    padding: 16px; 
+    border-top: 1px solid #334155;
+    background: #1e293b;
+    flex-shrink: 0;
+}
+
+/* Ensure the editor section doesn't push content out of view */
+body {
+    overflow: hidden;
+    height: 100vh;
+}
+
+.app-grid {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+}
         
         .chat-bubble { 
             max-width: 85%; 
@@ -859,6 +830,10 @@
                 this.updateProviderUI();
                 this.handleProviderChange();
                 this.setupAutoSave();
+                this.chatCollapsed = false;
+                        document.getElementById('chat-panel').style.height = '280px';
+                        document.querySelector('.chat-messages').style.display = 'flex';
+                        document.querySelector('.chat-input-area').style.display = 'block';
                 
                 if (this.currentFile && this.files[this.currentFile]) {
                     this.openFile(this.currentFile);
@@ -1762,22 +1737,35 @@
                 }
             },
 
-            toggleChat() {
-                const panel = document.getElementById('chat-panel');
-                const icon = document.getElementById('chat-toggle-icon');
-                this.chatCollapsed = !this.chatCollapsed;
-                
-                if (this.chatCollapsed) {
-                    this.chatHeight = panel.offsetHeight;
-                    panel.style.height = '42px';
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
-                } else {
-                    panel.style.height = this.chatHeight + 'px';
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
-                }
-            },
+toggleChat() {
+    const panel = document.getElementById('chat-panel');
+    const icon = document.getElementById('chat-toggle-icon');
+    const messages = document.getElementById('chat-messages');
+    const inputArea = document.querySelector('.chat-input-area');
+    
+    this.chatCollapsed = !this.chatCollapsed;
+    
+    if (this.chatCollapsed) {
+        // Store current height before collapsing
+        this.chatHeight = panel.offsetHeight;
+        panel.style.height = '42px';
+        if (messages) messages.style.display = 'none';
+        if (inputArea) inputArea.style.display = 'none';
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    } else {
+        panel.style.height = (this.chatHeight || 280) + 'px';
+        if (messages) messages.style.display = 'flex';
+        if (inputArea) inputArea.style.display = 'block';
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
+    }
+    
+    // Force editor to re-layout after chat toggle
+    setTimeout(() => {
+        if (this.editor) this.editor.layout();
+    }, 100);
+}
 
             showGitHubModal() {
                 document.getElementById('github-modal').classList.remove('hidden');
