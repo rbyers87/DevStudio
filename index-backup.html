@@ -4,11 +4,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Add after the viewport meta tag -->
-    <script>
-        // Check if running in Electron
-        window.isElectron = !!(window.process && window.process.type);
-    </script>
     <title>DevStudio - Full AI Code Editor with Ollama + Gemma 4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
@@ -1085,12 +1080,6 @@
                 this.updateProviderUI();
                 this.handleProviderChange();
                 this.setupAutoSave();
-
-                // Initialize Electron-specific features
-                if (window.isElectron && window.require) {
-                    this.initElectronFeatures();
-                }
-
                 this.chatCollapsed = false;
                 document.getElementById('chat-panel').style.height = '280px';
                 document.querySelector('.chat-messages').style.display = 'flex';
@@ -1108,242 +1097,10 @@
                 setTimeout(() => this.testOllamaConnection(), 500);
             },
 
-            // Add this new function for Electron features
-            initElectronFeatures() {
-                try {
-                    const { ipcRenderer, dialog } = window.require('electron');
-                    const fs = window.require('fs');
-                    const path = window.require('path');
-
-                    // Store references for use in other methods
-                    this.ipcRenderer = ipcRenderer;
-                    this.fs = fs;
-                    this.path = path;
-
-                    // Add "Open Folder" button to the header
-                    const headerButtons = document.querySelector('.header .flex.items-center.gap-3:last-child');
-                    if (headerButtons) {
-                        const openFolderBtn = document.createElement('button');
-                        openFolderBtn.onclick = () => this.openLocalFolder();
-                        openFolderBtn.style.cssText = 'padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px;';
-                        openFolderBtn.innerHTML = '<i class="fas fa-folder-open"></i>Open Folder';
-                        headerButtons.insertBefore(openFolderBtn, headerButtons.firstChild);
-                    }
-
-                    // Override the AI endpoint to use local Ollama if available
-                    this.checkLocalOllama();
-
-                    console.log('Electron features initialized');
-                } catch (error) {
-                    console.error('Failed to initialize Electron features:', error);
-                }
-            },
-
-            // Add this function to open local folders
-            async openLocalFolder() {
-                if (!this.ipcRenderer) return;
-
-                try {
-                    const result = await this.ipcRenderer.invoke('open-file-dialog');
-                    if (!result.canceled && result.filePaths.length > 0) {
-                        const folderPath = result.filePaths[0];
-                        await this.loadLocalFolder(folderPath);
-                    }
-                } catch (error) {
-                    console.error('Error opening folder:', error);
-                    this.showToast('Error opening folder: ' + error.message);
-                }
-            },
-
-            // Add this function to load local folder contents
-            async loadLocalFolder(folderPath) {
-                try {
-                    // Store the project path
-                    this.currentProjectPath = folderPath;
-
-                    // Clear current files
-                    this.files = {};
-
-                    // Read directory recursively
-                    await this.readDirectoryRecursive(folderPath, '');
-
-                    // Reset to root folder view
-                    this.currentFolder = '';
-
-                    // Update UI
-                    this.saveToStorage();
-                    this.updateFolderSelector();
-                    this.renderFileTree();
-
-                    // Open the first HTML file if available
-                    const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
-                    if (firstHtml) {
-                        this.openFile(firstHtml);
-                    } else if (Object.keys(this.files).length > 0) {
-                        const firstFile = Object.keys(this.files).find(f => this.files[f].type === 'file');
-                        if (firstFile) this.openFile(firstFile);
-                    }
-
-                    this.showToast(`Loaded: ${folderPath.split('/').pop() || folderPath}`);
-                } catch (error) {
-                    console.error('Error loading folder:', error);
-                    this.showToast('Error loading folder: ' + error.message);
-                }
-            },
-
-            // Add this function to read directories recursively
-            async readDirectoryRecursive(basePath, relativePath) {
-                const currentPath = this.path.join(basePath, relativePath);
-
-                try {
-                    const items = this.fs.readdirSync(currentPath);
-
-                    for (const item of items) {
-                        const itemPath = this.path.join(currentPath, item);
-                        const itemRelativePath = relativePath ? relativePath + '/' + item : item;
-
-                        // Skip common directories/files to ignore
-                        if (item.startsWith('.') ||
-                            item === 'node_modules' ||
-                            item === '__pycache__' ||
-                            item === '.git') {
-                            continue;
-                        }
-
-                        try {
-                            const stats = this.fs.statSync(itemPath);
-
-                            if (stats.isDirectory()) {
-                                // Add folder
-                                this.files[itemRelativePath + '/'] = {
-                                    content: null,
-                                    type: 'folder'
-                                };
-
-                                // Recursively read subdirectories
-                                await this.readDirectoryRecursive(basePath, itemRelativePath);
-                            } else if (stats.isFile()) {
-                                // Check file size (skip files larger than 1MB)
-                                if (stats.size > 1024 * 1024) {
-                                    this.files[itemRelativePath] = {
-                                        content: `[File too large: ${(stats.size / 1024).toFixed(1)}KB]`,
-                                        type: 'file'
-                                    };
-                                    continue;
-                                }
-
-                                // Read file content
-                                try {
-                                    const content = this.fs.readFileSync(itemPath, 'utf8');
-                                    this.files[itemRelativePath] = {
-                                        content: content,
-                                        type: 'file'
-                                    };
-                                } catch (readError) {
-                                    // File might be binary, skip it
-                                    console.log(`Skipping binary file: ${itemRelativePath}`);
-                                }
-                            }
-                        } catch (statError) {
-                            console.log(`Cannot access: ${itemRelativePath}`);
-                        }
-                    }
-                } catch (error) {
-                    console.error(`Error reading directory ${relativePath}:`, error);
-                }
-            },
-
-            // Add this function to check local Ollama
-            async checkLocalOllama() {
-                try {
-                    const http = window.require('http');
-
-                    const checkOllama = () => {
-                        return new Promise((resolve) => {
-                            const req = http.get('http://localhost:11434/api/tags', (res) => {
-                                let data = '';
-                                res.on('data', (chunk) => data += chunk);
-                                res.on('end', () => {
-                                    try {
-                                        const json = JSON.parse(data);
-                                        if (json.models && json.models.length > 0) {
-                                            this.localOllamaModels = json.models;
-
-                                            // If Gemma 4 is available, set it as default
-                                            const gemma4 = json.models.find(m => m.name.includes('gemma4'));
-                                            if (gemma4 && this.ai.provider === 'local') {
-                                                this.ai.model = gemma4.name;
-                                            }
-
-                                            this.addChatMessage(
-                                                `✅ Local Ollama detected!\nAvailable models: ${json.models.map(m => m.name).join(', ')}`,
-                                                'system'
-                                            );
-                                        }
-                                    } catch (e) {
-                                        console.log('Ollama response parse error');
-                                    }
-                                    resolve(true);
-                                });
-                            });
-
-                            req.on('error', () => {
-                                console.log('Ollama not running');
-                                resolve(false);
-                            });
-
-                            req.setTimeout(2000, () => {
-                                req.destroy();
-                                resolve(false);
-                            });
-                        });
-                    };
-
-                    const isRunning = await checkOllama();
-                    if (!isRunning) {
-                        this.addChatMessage(
-                            '⚠️ Local Ollama not detected. Please start Ollama for local AI features.\n\n' +
-                            'Run in terminal: ollama serve\n' +
-                            'Then pull a model: ollama pull gemma4:latest',
-                            'system'
-                        );
-                    }
-                } catch (error) {
-                    console.log('Error checking Ollama:', error);
-                }
-            },
-
-            // Modify the existing saveFile function for Electron
-            saveFileToDisk(filePath, content) {
-                if (window.isElectron && this.ipcRenderer) {
-                    this.ipcRenderer.invoke('save-file', { path: filePath, content: content })
-                        .then(result => {
-                            if (result.success) {
-                                this.showToast(`Saved: ${filePath.split('/').pop()}`);
-                            } else {
-                                this.showToast(`Error saving: ${result.error}`);
-                            }
-                        });
-                }
-            },
-
             setupEventListeners() {
                 window.addEventListener('beforeunload', () => {
                     if (this.currentFile) {
                         this.saveToStorage();
-                    }
-                });
-
-                // Add Ctrl+S / Cmd+S shortcut for saving files
-                window.addEventListener('keydown', (e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                        e.preventDefault();
-                        if (window.isElectron && this.currentProjectPath) {
-                            this.saveCurrentToDisk();
-                        } else {
-                            this.saveToStorage();
-                            this.showToast('Project saved to local storage');
-                        }
                     }
                 });
 
@@ -2287,19 +2044,6 @@
                 }
             },
 
-            // Add this function to save current file to disk
-            saveCurrentToDisk() {
-                if (!this.currentProjectPath || !this.currentFile) {
-                    this.showToast('Open a folder first to save files to disk');
-                    return;
-                }
-
-                if (this.files[this.currentFile] && this.files[this.currentFile].type === 'file') {
-                    const filePath = this.path.join(this.currentProjectPath, this.currentFile);
-                    this.saveFileToDisk(filePath, this.files[this.currentFile].content);
-                }
-            },
-
             async connectGitHub() {
                 const token = document.getElementById('github-token').value.trim();
                 const repo = document.getElementById('github-repo').value.trim();
@@ -2528,44 +2272,14 @@
                     currentFolder: this.currentFolder,
                     currentFile: this.currentFile
                 };
-
-                if (window.isElectron && window.require) {
-                    try {
-                        const Store = window.require('electron-store');
-                        const store = new Store();
-                        store.set('devstudio-data', data);
-                    } catch (e) {
-                        console.error('Electron store error:', e);
-                        localStorage.setItem('devstudio_data', JSON.stringify(data));
-                    }
-                } else {
-                    localStorage.setItem('devstudio_data', JSON.stringify(data));
-                }
+                localStorage.setItem('devstudio_data', JSON.stringify(data));
             },
 
             loadFromStorage() {
-                let data = null;
-
-                if (window.isElectron && window.require) {
-                    try {
-                        const Store = window.require('electron-store');
-                        const store = new Store();
-                        const storedData = store.get('devstudio-data');
-                        if (storedData) {
-                            data = storedData;
-                        }
-                    } catch (e) {
-                        console.error('Electron store error:', e);
-                        const raw = localStorage.getItem('devstudio_data');
-                        data = raw ? JSON.parse(raw) : null;
-                    }
-                } else {
-                    const raw = localStorage.getItem('devstudio_data');
-                    data = raw ? JSON.parse(raw) : null;
-                }
+                const data = localStorage.getItem('devstudio_data');
 
                 if (data) {
-                    const parsed = data;  // Already an object if from electron-store
+                    const parsed = JSON.parse(data);
                     this.files = parsed.files || {};
                     this.versions = parsed.versions || [];
                     this.github = parsed.github || { token: null, repo: null, connected: false };
@@ -2573,7 +2287,7 @@
                     this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 13, wordWrap: true };
                     this.expandedFolders = new Set(parsed.expandedFolders || ['']);
                     this.currentFolder = parsed.currentFolder || '';
-                    this.currentFile = parsed.currentFile || null;;
+                    this.currentFile = parsed.currentFile || null;
                 } else {
                     // Initialize with demo files
                     this.files = {
