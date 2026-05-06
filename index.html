@@ -1746,7 +1746,6 @@ toggleChat() {
     this.chatCollapsed = !this.chatCollapsed;
     
     if (this.chatCollapsed) {
-        // Store current height before collapsing
         this.chatHeight = panel.offsetHeight;
         panel.style.height = '42px';
         if (messages) messages.style.display = 'none';
@@ -1761,11 +1760,10 @@ toggleChat() {
         icon.classList.add('fa-chevron-down');
     }
     
-    // Force editor to re-layout after chat toggle
     setTimeout(() => {
         if (this.editor) this.editor.layout();
     }, 100);
-}
+},
 
             showGitHubModal() {
                 document.getElementById('github-modal').classList.remove('hidden');
