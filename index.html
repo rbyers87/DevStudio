@@ -1981,36 +1981,36 @@
                 }
             },
 
-            toggleChat() {
+              toggleChat() {
                 const panel = document.getElementById('chat-panel');
                 const icon = document.getElementById('chat-toggle-icon');
                 const messages = document.getElementById('chat-messages');
                 const inputArea = document.querySelector('.chat-input-area');
-
+                
                 this.chatCollapsed = !this.chatCollapsed;
-
+                
                 if (this.chatCollapsed) {
-                    this.chatHeight = panel.offsetHeight;
-                    panel.style.height = '42px';
-                    if (messages) messages.style.display = 'none';
-                    if (inputArea) inputArea.style.display = 'none';
-                    icon.classList.remove('fa-chevron-down');
-                    icon.classList.add('fa-chevron-up');
+                  this.chatHeight = panel.offsetHeight;
+                  panel.style.height = '42px';
+                  if (messages) messages.style.display = 'none';
+                  if (inputArea) inputArea.style.display = 'none';
+                  icon.classList.remove('fa-chevron-down');
+                  icon.classList.add('fa-chevron-up');
                 } else {
-                    panel.style.height = (this.chatHeight || 280) + 'px';
-                    if (messages) messages.style.display = 'flex';
-                    if (inputArea) inputArea.style.display = 'block';
-                    icon.classList.remove('fa-chevron-up');
-                    icon.classList.add('fa-chevron-down');
+                  panel.style.height = (this.chatHeight || 280) + 'px';
+                  if (messages) messages.style.display = 'flex';
+                  if (inputArea) inputArea.style.display = 'block';
+                  icon.classList.remove('fa-chevron-up');
+                  icon.classList.add('fa-chevron-down');
                 }
-
+                
                 setTimeout(() => {
-                    if (this.editor) this.editor.layout();
+                  if (this.editor) this.editor.layout();
                 }, 100);
-            },
-
-            showGitHubModal() {
-                document.getElementById('github-modal').classList.remove('hidden');
+              },
+            
+              showGitHubModal() {
+      document.getElementById('github-modal').classList.remove('hidden');
                 if (this.github.token) {
                     document.getElementById('github-token').value = this.github.token;
                     document.getElementById('github-repo').value = this.github.repo || '';
