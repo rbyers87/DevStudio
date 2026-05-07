@@ -181,6 +181,24 @@
             width: 100%;
             height: 100%;
         }
+        
+        #fallback-editor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            padding: 10px;
+            border: none;
+            resize: none;
+            display: none;
+        }
 
         .chat-panel {
             height: 280px;
@@ -786,6 +804,7 @@
             <div class="tabs-bar" id="tabs-container"></div>
             <div class="editor-container">
                 <div id="monaco-editor"></div>
+                <textarea id="fallback-editor" placeholder="Monaco editor failed to load. Using fallback text editor..."></textarea>
                 <div id="empty-state" class="empty-state" style="display: none;">
                     <div style="text-align: center;">
                         <i class="fas fa-code" style="font-size: 56px; margin-bottom: 16px; opacity: 0.4;"></i>
@@ -949,6 +968,14 @@
                     Size</label>
                 <input type="number" id="editor-font-size" class="input mt-1" value="13" min="10" max="24" step="1">
             </div>
+            
+            <div class="mb-4">
+                <label style="font-size: 13px; color: #94a3b8; font-weight: 500; display: flex; align-items: center; gap: 8px;">
+                    <i class="fas fa-magic mr-1"></i> Auto-apply AI file changes
+                    <input type="checkbox" id="ai-auto-apply" style="margin-left: auto; width: 18px; height: 18px; cursor: pointer;">
+                </label>
+                <p style="font-size: 11px; color: #64748b; margin-top: 6px;">When enabled, AI can directly create, modify, and delete files without confirmation</p>
+            </div>
 
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button onclick="app.exportProject()" class="btn btn-secondary" style="flex: 1;"><i
@@ -1012,13 +1039,15 @@
             files: {},
             versions: [],
             github: { token: null, repo: null, connected: false },
-            ai: { provider: 'local', apiKey: '', model: 'gemma4:latest', endpoint: 'http://localhost:11434' },
+            ai: { provider: 'local', apiKey: '', model: 'gemma4:latest', endpoint: 'http://localhost:11434', autoApply: false },
             settings: { theme: 'vs-dark', fontSize: 13, wordWrap: true },
             chatCollapsed: false,
             chatHeight: 260,
             expandedFolders: new Set(['']),
             currentFolder: '',
             autoSaveTimer: null,
+            monacoLoaded: false,
+            useFallbackEditor: false,
 
             providers: {
                 openai: {
@@ -1073,10 +1102,13 @@
                 }
             },
 
-            init() {
+            async init() {
                 this.loadFromStorage();
                 this.setupEventListeners();
-                this.initMonaco();
+                
+                // Wait for Monaco to be ready before opening files
+                await this.initMonaco();
+                
                 this.renderFileTree();
                 this.renderVersions();
                 this.updateFolderSelector();
@@ -1106,6 +1138,225 @@
 
                 // Test Ollama connection on load
                 setTimeout(() => this.testOllamaConnection(), 500);
+            },
+            
+            initMonaco() {
+                return new Promise((resolve) => {
+                    const editorElement = document.getElementById('monaco-editor');
+                    const fallbackEditor = document.getElementById('fallback-editor');
+                    
+                    try {
+                        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
+                        require(['vs/editor/editor.main'], () => {
+                            try {
+                                // Ensure the container has dimensions
+                                if (editorElement.offsetWidth === 0 || editorElement.offsetHeight === 0) {
+                                    editorElement.style.width = '100%';
+                                    editorElement.style.height = '100%';
+                                }
+
+                                this.editor = monaco.editor.create(editorElement, {
+                                    value: '',
+                                    language: 'javascript',
+                                    theme: this.settings.theme,
+                                    fontSize: this.settings.fontSize,
+                                    wordWrap: this.settings.wordWrap ? 'on' : 'off',
+                                    automaticLayout: true,
+                                    minimap: { enabled: true },
+                                    scrollBeyondLastLine: false,
+                                    fixedOverflowWidgets: true,
+                                    fontFamily: 'Consolas, "Courier New", monospace',
+                                    lineNumbers: 'on',
+                                    renderWhitespace: 'selection'
+                                });
+
+                                // Force layout after a short delay
+                                setTimeout(() => {
+                                    if (this.editor) {
+                                        this.editor.layout();
+                                    }
+                                }, 100);
+                                
+                                // Additional layout after a longer delay
+                                setTimeout(() => {
+                                    if (this.editor) {
+                                        this.editor.layout();
+                                    }
+                                }, 500);
+
+                                let timeout;
+                                this.editor.onDidChangeModelContent(() => {
+                                    if (this.currentFile && this.files[this.currentFile]) {
+                                        clearTimeout(timeout);
+                                        timeout = setTimeout(() => {
+                                            this.files[this.currentFile].content = this.editor.getValue();
+                                            this.saveToStorage();
+                                            if (this.isPreviewable(this.currentFile)) {
+                                                this.updatePreview();
+                                            }
+                                        }, 800);
+                                    }
+                                });
+                                
+                                this.monacoLoaded = true;
+                                editorElement.style.display = 'block';
+                                fallbackEditor.style.display = 'none';
+                                console.log('Monaco editor loaded successfully');
+                                resolve(true);
+                            } catch (monacoError) {
+                                console.error('Monaco editor creation error:', monacoError);
+                                this.useFallbackEditor = true;
+                                this.setupFallbackEditor(fallbackEditor);
+                                resolve(false);
+                            }
+                        });
+                    } catch (requireError) {
+                        console.error('Monaco loader error:', requireError);
+                        this.useFallbackEditor = true;
+                        this.setupFallbackEditor(fallbackEditor);
+                        resolve(false);
+                    }
+                    
+                    // Timeout fallback - if Monaco doesn't load within 5 seconds, use fallback
+                    setTimeout(() => {
+                        if (!this.monacoLoaded && !this.useFallbackEditor) {
+                            console.warn('Monaco editor load timeout, using fallback');
+                            this.useFallbackEditor = true;
+                            this.setupFallbackEditor(fallbackEditor);
+                            resolve(false);
+                        }
+                    }, 5000);
+                });
+            },
+            
+            setupFallbackEditor(fallbackEditor) {
+                const editorElement = document.getElementById('monaco-editor');
+                editorElement.style.display = 'none';
+                fallbackEditor.style.display = 'block';
+                
+                fallbackEditor.addEventListener('input', (e) => {
+                    if (this.currentFile && this.files[this.currentFile]) {
+                        this.files[this.currentFile].content = e.target.value;
+                        this.saveToStorage();
+                        if (this.isPreviewable(this.currentFile)) {
+                            this.updatePreview();
+                        }
+                    }
+                });
+                
+                this.showToast('Using fallback text editor (Monaco failed to load)', 5000);
+            },
+            
+            getEditorContent() {
+                if (this.useFallbackEditor) {
+                    return document.getElementById('fallback-editor').value;
+                }
+                return this.editor ? this.editor.getValue() : '';
+            },
+            
+            setEditorContent(content) {
+                if (this.useFallbackEditor) {
+                    document.getElementById('fallback-editor').value = content;
+                } else if (this.editor) {
+                    const language = this.currentFile ? this.getLanguage(this.currentFile) : 'javascript';
+                    const model = monaco.editor.createModel(content, language);
+                    this.editor.setModel(model);
+                    setTimeout(() => {
+                        if (this.editor) this.editor.layout();
+                    }, 50);
+                }
+            },
+            
+            getProjectContext() {
+                let context = '# Full Project Context\n\n';
+                let totalSize = 0;
+                const MAX_SIZE = 10240; // 10KB per file
+                
+                for (const [path, fileData] of Object.entries(this.files)) {
+                    if (fileData.type === 'file') {
+                        const content = fileData.content || '';
+                        const size = content.length;
+                        totalSize += Math.min(size, MAX_SIZE);
+                        
+                        context += `## File: ${path}\n`;
+                        if (size > MAX_SIZE) {
+                            context += `[File truncated: ${(size / 1024).toFixed(1)}KB, showing first ${(MAX_SIZE / 1024).toFixed(0)}KB]\n`;
+                            context += '```\n' + content.substring(0, MAX_SIZE) + '\n```\n\n';
+                        } else {
+                            context += '```\n' + content + '\n```\n\n';
+                        }
+                    }
+                }
+                
+                context += `\nTotal project size: ${(totalSize / 1024).toFixed(1)}KB\n`;
+                context += `Total files: ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length}\n`;
+                
+                return context;
+            },
+            
+            applyFileOperations(operations) {
+                const results = { success: [], failed: [] };
+                
+                for (const op of operations) {
+                    try {
+                        switch (op.action) {
+                            case 'create':
+                            case 'update':
+                                // Ensure parent folders exist
+                                const pathParts = op.path.split('/');
+                                if (pathParts.length > 1) {
+                                    let currentPath = '';
+                                    for (let i = 0; i < pathParts.length - 1; i++) {
+                                        currentPath = currentPath ? currentPath + pathParts[i] + '/' : pathParts[i] + '/';
+                                        if (!this.files[currentPath]) {
+                                            this.files[currentPath] = { content: null, type: 'folder' };
+                                        }
+                                    }
+                                }
+                                
+                                this.files[op.path] = { content: op.content || '', type: 'file' };
+                                results.success.push(`✅ ${op.action} ${op.path}`);
+                                break;
+                                
+                            case 'delete':
+                                if (this.files[op.path]) {
+                                    delete this.files[op.path];
+                                    results.success.push(`✅ delete ${op.path}`);
+                                } else {
+                                    results.failed.push(`❌ delete ${op.path} (file not found)`);
+                                }
+                                break;
+                                
+                            default:
+                                results.failed.push(`❌ unknown action: ${op.action}`);
+                        }
+                    } catch (error) {
+                        results.failed.push(`❌ ${op.action} ${op.path}: ${error.message}`);
+                    }
+                }
+                
+                // Refresh UI
+                this.saveToStorage();
+                this.updateFolderSelector();
+                this.renderFileTree();
+                
+                // If current file was deleted, close it
+                if (this.currentFile && !this.files[this.currentFile]) {
+                    const remaining = Object.keys(this.files).filter(f => this.files[f].type !== 'folder');
+                    if (remaining.length > 0) {
+                        this.openFile(remaining[0]);
+                    } else {
+                        this.currentFile = null;
+                        if (this.useFallbackEditor) {
+                            document.getElementById('fallback-editor').value = '';
+                        } else if (this.editor) {
+                            this.editor.setValue('');
+                        }
+                        document.getElementById('empty-state').style.display = 'flex';
+                    }
+                }
+                
+                return results;
             },
 
             // Add this new function for Electron features
@@ -1430,67 +1681,6 @@
                 this.showToast('⚠️ Ollama not running - check chat for setup instructions', 5000);
             },
 
-            initMonaco() {
-                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-                require(['vs/editor/editor.main'], () => {
-                    const editorElement = document.getElementById('monaco-editor');
-
-                    // Ensure the container has dimensions
-                    if (editorElement.offsetWidth === 0 || editorElement.offsetHeight === 0) {
-                        editorElement.style.width = '100%';
-                        editorElement.style.height = '100%';
-                    }
-
-                    this.editor = monaco.editor.create(editorElement, {
-                        value: '',
-                        language: 'javascript',
-                        theme: this.settings.theme,
-                        fontSize: this.settings.fontSize,
-                        wordWrap: this.settings.wordWrap ? 'on' : 'off',
-                        automaticLayout: true,
-                        minimap: { enabled: true },
-                        scrollBeyondLastLine: false,
-                        fixedOverflowWidgets: true,
-                        fontFamily: 'Consolas, "Courier New", monospace',
-                        lineNumbers: 'on',
-                        renderWhitespace: 'selection'
-                    });
-
-                    // Force layout after a short delay
-                    setTimeout(() => {
-                        if (this.editor) {
-                            this.editor.layout();
-                        }
-                    }, 100);
-
-                    // Additional layout after a longer delay to ensure everything is rendered
-                    setTimeout(() => {
-                        if (this.editor) {
-                            this.editor.layout();
-                        }
-                    }, 500);
-
-                    let timeout;
-                    this.editor.onDidChangeModelContent(() => {
-                        if (this.currentFile && this.files[this.currentFile]) {
-                            clearTimeout(timeout);
-                            timeout = setTimeout(() => {
-                                this.files[this.currentFile].content = this.editor.getValue();
-                                this.saveToStorage();
-                                if (this.isPreviewable(this.currentFile)) {
-                                    this.updatePreview();
-                                }
-                            }, 800);
-                        }
-                    });
-
-                    // Force layout after editor is created
-                    setTimeout(() => {
-                        if (this.editor) this.editor.layout();
-                    }, 100);
-                });
-            },
-
             setupColumnResizers() {
                 const sidebarResizer = document.getElementById('sidebar-resizer');
                 const previewResizer = document.getElementById('preview-resizer');
@@ -1638,7 +1828,8 @@
                     provider: provider,
                     apiKey: document.getElementById('ai-api-key').value.trim(),
                     model: document.getElementById('ai-model').value.trim(),
-                    endpoint: document.getElementById('ai-endpoint').value.trim()
+                    endpoint: document.getElementById('ai-endpoint').value.trim(),
+                    autoApply: document.getElementById('ai-auto-apply').checked
                 };
 
                 if (this.ai.provider === 'local' && !this.ai.model) {
@@ -1900,9 +2091,12 @@
                 this.currentFile = filename;
                 document.getElementById('empty-state').style.display = 'none';
 
-                if (this.editor) {
-                    const content = this.files[filename]?.content || '';
-                    const language = this.getLanguage(filename);
+                const content = this.files[filename]?.content || '';
+                const language = this.getLanguage(filename);
+                
+                if (this.useFallbackEditor) {
+                    document.getElementById('fallback-editor').value = content;
+                } else if (this.editor) {
                     const model = monaco.editor.createModel(content, language);
                     this.editor.setModel(model);
                     setTimeout(() => {
@@ -1928,7 +2122,11 @@
                         if (this.currentFile) {
                             this.openFile(this.currentFile);
                         } else {
-                            if (this.editor) this.editor.setValue('');
+                            if (this.useFallbackEditor) {
+                                document.getElementById('fallback-editor').value = '';
+                            } else if (this.editor) {
+                                this.editor.setValue('');
+                            }
                             document.getElementById('empty-state').style.display = 'flex';
                         }
                     }
@@ -2047,9 +2245,25 @@
                 try {
                     const response = await this.callAI(message);
                     this.addChatMessage(response, 'ai');
-
-                    if (response.includes('```') && (response.includes('```javascript') || response.includes('```html') || response.includes('```css'))) {
-                        this.addChatMessage('💡 <button onclick="app.applyAIChanges()" style="color: #60a5fa; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 4px 8px; border-radius: 4px;" onmouseover="this.style.background=\'#334155\'" onmouseout="this.style.background=\'transparent\'"><i class="fas fa-code-branch"></i> Apply suggested code</button>', 'system');
+                    
+                    // Parse JSON operations from AI response
+                    const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
+                    if (jsonMatch) {
+                        try {
+                            const jsonData = JSON.parse(jsonMatch[1]);
+                            if (jsonData.operations && Array.isArray(jsonData.operations)) {
+                                if (this.ai.autoApply) {
+                                    const results = this.applyFileOperations(jsonData.operations);
+                                    const summary = results.success.join('\n') + (results.failed.length ? '\n' + results.failed.join('\n') : '');
+                                    this.addChatMessage(`✅ Auto-applied file changes:\n${summary}`, 'system');
+                                    this.showToast(`Applied ${results.success.length} file operations`);
+                                } else {
+                                    this.addChatMessage(`💡 AI suggested file operations. Enable "Auto-apply AI file changes" in Settings to apply automatically.\n\n\`\`\`json\n${JSON.stringify(jsonData.operations, null, 2)}\n\`\`\``, 'system');
+                                }
+                            }
+                        } catch (e) {
+                            console.log('Failed to parse JSON operations:', e);
+                        }
                     }
                 } catch (error) {
                     console.error('AI Error:', error);
@@ -2075,18 +2289,25 @@
             },
 
             async callAI(message) {
-                const { provider, apiKey, model, endpoint } = this.ai;
+                const { provider, apiKey, model, endpoint, autoApply } = this.ai;
                 const config = this.providers[provider];
 
                 const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
                 const fileName = this.currentFile || 'none';
                 const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
+                
+                // Get full project context
+                const projectContext = this.getProjectContext();
 
-                let context = `You are DevStudio AI, an expert coding assistant.`;
-                context += `\nCurrent file: ${fileName} (${fileExt} extension)`;
-                context += `\n\nCurrent code:\n\`\`\`${fileExt}\n${currentCode || '(empty file)'}\n\`\`\``;
+                let context = `You are DevStudio AI, an expert coding assistant. You have FULL access to all files in the project and can directly modify them.`;
+                context += `\n\n${projectContext}`;
+                context += `\n\nCurrent open file: ${fileName} (${fileExt} extension)`;
+                context += `\nCurrent code in open file:\n\`\`\`${fileExt}\n${currentCode || '(empty file)'}\n\`\`\``;
                 context += `\n\nUser request: ${message}`;
-                context += `\n\nRespond with helpful code, explanations, or suggestions. If providing code changes, format them in markdown code blocks with language specification.`;
+                context += `\n\nIMPORTANT: When the user asks you to create, modify, or delete files, respond with a JSON block containing operations.`;
+                context += `\n\nExample JSON response for a file change:\n\`\`\`json\n{\n  "operations": [\n    { "action": "update", "path": "index.html", "content": "new html content" },\n    { "action": "create", "path": "newfile.js", "content": "console.log('hello');" },\n    { "action": "delete", "path": "oldfile.txt" }\n  ]\n}\n\`\`\``;
+                context += `\n\nYou can also make multiple changes in one response. Include the JSON block along with your explanation.`;
+                context += `\n\nRespond with helpful code, explanations, or suggestions.`;
 
                 if (provider === 'local') {
                     const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
@@ -2133,7 +2354,7 @@
                             stream: false,
                             options: {
                                 temperature: 0.7,
-                                num_predict: 4096,
+                                num_predict: 8192,
                                 top_p: 0.9,
                                 repeat_penalty: 1.1
                             }
@@ -2162,16 +2383,16 @@
                     headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
                     body = JSON.stringify({
                         model: model || config.defaultModel,
-                        messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }],
+                        messages: [{ role: 'system', content: 'You are a helpful coding assistant that has full access to the project files.' }, { role: 'user', content: context }],
                         temperature: 0.7,
-                        max_tokens: 4096
+                        max_tokens: 8192
                     });
                 } else if (provider === 'anthropic') {
                     url = config.baseUrl;
                     headers = { 'x-api-key': effectiveKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
                     body = JSON.stringify({
                         model: model || config.defaultModel,
-                        max_tokens: 4096,
+                        max_tokens: 8192,
                         messages: [{ role: 'user', content: context }]
                     });
                 } else if (provider === 'google') {
@@ -2180,7 +2401,7 @@
                     headers = { 'Content-Type': 'application/json' };
                     body = JSON.stringify({
                         contents: [{ parts: [{ text: context }] }],
-                        generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+                        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
                     });
                 } else {
                     url = endpoint || config.baseUrl;
@@ -2217,11 +2438,11 @@
 
             quickAction(action) {
                 const actions = {
-                    explain: 'Explain this code in detail, including what each part does and any potential improvements.',
-                    fix: 'Find and fix bugs or issues in this code. Provide the corrected version.',
-                    optimize: 'Optimize this code for better performance, readability, and maintainability.',
-                    document: 'Add comprehensive documentation and comments to this code.',
-                    test: 'Write unit tests for this code using appropriate testing framework.'
+                    explain: 'Explain the current file in detail, including what each part does and any potential improvements.',
+                    fix: 'Find and fix bugs or issues in the current file. Provide the corrected version.',
+                    optimize: 'Optimize the current file for better performance, readability, and maintainability.',
+                    document: 'Add comprehensive documentation and comments to the current file.',
+                    test: 'Write unit tests for the current file using appropriate testing framework.'
                 };
                 document.getElementById('chat-input').value = actions[action];
                 this.sendMessage();
@@ -2441,6 +2662,7 @@
                 document.getElementById('ai-endpoint').value = this.ai.endpoint;
                 document.getElementById('editor-theme').value = this.settings.theme;
                 document.getElementById('editor-font-size').value = this.settings.fontSize;
+                document.getElementById('ai-auto-apply').checked = this.ai.autoApply || false;
                 this.updateProviderHelp();
                 this.handleProviderChange();
             },
@@ -2569,7 +2791,7 @@
                     this.files = parsed.files || {};
                     this.versions = parsed.versions || [];
                     this.github = parsed.github || { token: null, repo: null, connected: false };
-                    this.ai = parsed.ai || { provider: 'local', apiKey: '', model: 'gemma4:latest', endpoint: 'http://localhost:11434' };
+                    this.ai = parsed.ai || { provider: 'local', apiKey: '', model: 'gemma4:latest', endpoint: 'http://localhost:11434', autoApply: false };
                     this.settings = parsed.settings || { theme: 'vs-dark', fontSize: 13, wordWrap: true };
                     this.expandedFolders = new Set(parsed.expandedFolders || ['']);
                     this.currentFolder = parsed.currentFolder || '';
