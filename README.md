@@ -225,3 +225,16 @@ SUMMARY
 ✅ Start Menu shortcut created
 
 Double-click the DevStudio shortcut on your desktop - that's all you need now!
+
+# Refactor instructions
+
+Here's the plan:
+
+index.html — structure/markup only
+styles.css — all CSS
+app-core.js — state, storage, init
+app-editor.js — Monaco/editor logic
+app-files.js — file tree, tabs, folder management
+app-ai.js — AI provider logic & chat
+app-github.js — GitHub integration
+app-ui.js — modals, preview, versions, settings, toast
