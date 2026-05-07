@@ -1,7 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
 // AI provider logic - Natural responses + automatic file operations
-// COMPLETE VERSION - Includes all helper methods
 // ============================================================
 
 app.saveAISettings = function () {
@@ -199,12 +198,8 @@ app.extractFileOperations = function (response) {
                 operations.push({ action: data.action || 'create', path: data.file, content: data.content });
             } else if (data.path && data.content) {
                 operations.push({ action: data.action || 'update', path: data.path, content: data.content });
-            } else if (data.filename && data.content) {
-                operations.push({ action: 'create', path: data.filename, content: data.content });
             }
-        } catch (e) {
-            console.log('JSON parse error:', e);
-        }
+        } catch (e) { }
     }
 
     // Look for code blocks with file indicators
@@ -240,8 +235,6 @@ app.extractFileOperations = function (response) {
             operations.push({ action: 'create', path: 'style.css', content: content });
         } else if (language === 'javascript' || language === 'js') {
             operations.push({ action: 'create', path: 'script.js', content: content });
-        } else if (language === 'html') {
-            operations.push({ action: 'create', path: 'page.html', content: content });
         }
 
         blockIndex++;
@@ -257,7 +250,6 @@ app.removeOperationBlocks = function (text) {
     // Remove any stray JSON objects that might be visible
     text = text.replace(/\{\s*"operations"\s*:\s*\[[\s\S]*?\]\s*\}/g, '');
     text = text.replace(/\{\s*"file"\s*:\s*"[^"]*"\s*,\s*"content"\s*:\s*"[^"]*"\s*\}/g, '');
-    text = text.replace(/\{\s*"path"\s*:\s*"[^"]*"\s*,\s*"content"\s*:\s*"[^"]*"\s*\}/g, '');
     // Clean up extra whitespace
     text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
     return text.trim();
@@ -289,17 +281,11 @@ app.showApplyButton = function (operations) {
     applyBtn.onclick = () => {
         const results = this.applyFileOperations(operations);
         let summary = `✅ Applied ${results.success.length} changes.`;
-        if (results.failed.length > 0) {
-            summary += `\n❌ Failed: ${results.failed.length}`;
-        }
         this.addChatMessage(summary, 'system');
         this.showToast(`Applied ${results.success.length} file changes`);
         buttonDiv.remove();
         this.renderFileTree();
         this.updateFolderSelector();
-        if (operations.some(op => op.path === this.currentFile)) {
-            this.openFile(this.currentFile);
-        }
     };
 
     const dismissBtn = document.createElement('button');
@@ -314,267 +300,6 @@ app.showApplyButton = function (operations) {
     buttonDiv.appendChild(dismissBtn);
     container.appendChild(buttonDiv);
     container.scrollTop = container.scrollHeight;
-};
-
-// Helper method to get project context (calls from app-core.js)
-app.getProjectContext = function () {
-    let context = '# Full Project Context\n\n';
-    let totalSize = 0;
-    const MAX_SIZE = 10240;
-
-    for (const [path, fileData] of Object.entries(this.files)) {
-        if (fileData.type === 'file') {
-            const content = fileData.content || '';
-            const size = content.length;
-            totalSize += Math.min(size, MAX_SIZE);
-
-            context += `## File: ${path}\n`;
-            if (size > MAX_SIZE) {
-                context += `[File truncated: ${(size / 1024).toFixed(1)}KB, showing first ${(MAX_SIZE / 1024).toFixed(0)}KB]\n`;
-                context += '```\n' + content.substring(0, MAX_SIZE) + '\n```\n\n';
-            } else {
-                context += '```\n' + content + '\n```\n\n';
-            }
-        }
-    }
-
-    context += `\nTotal project size: ${(totalSize / 1024).toFixed(1)}KB\n`;
-    context += `Total files: ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length}\n`;
-
-    return context;
-};
-
-// Helper method to apply file operations
-app.applyFileOperations = function (operations) {
-    const results = { success: [], failed: [] };
-
-    for (const op of operations) {
-        try {
-            switch (op.action) {
-                case 'create':
-                case 'update':
-                    // Ensure parent folders exist
-                    const pathParts = op.path.split('/');
-                    if (pathParts.length > 1) {
-                        let currentPath = '';
-                        for (let i = 0; i < pathParts.length - 1; i++) {
-                            currentPath = currentPath ? currentPath + pathParts[i] + '/' : pathParts[i] + '/';
-                            if (!this.files[currentPath]) {
-                                this.files[currentPath] = { content: null, type: 'folder' };
-                            }
-                        }
-                    }
-                    this.files[op.path] = { content: op.content || '', type: 'file' };
-                    results.success.push(`${op.action} ${op.path}`);
-                    break;
-
-                case 'delete':
-                    if (this.files[op.path]) {
-                        delete this.files[op.path];
-                        results.success.push(`delete ${op.path}`);
-                    } else {
-                        results.failed.push(`delete ${op.path} (file not found)`);
-                    }
-                    break;
-
-                default:
-                    results.failed.push(`unknown action: ${op.action}`);
-            }
-        } catch (error) {
-            results.failed.push(`${op.action} ${op.path}: ${error.message}`);
-        }
-    }
-
-    this.saveToStorage();
-    return results;
-};
-
-// Helper methods for UI updates (call from app-files.js)
-app.updateFolderSelector = function () {
-    const select = document.getElementById('folder-select');
-    if (!select) return;
-
-    select.innerHTML = '<option value="">📁 Root</option>';
-
-    const folders = new Set();
-    Object.keys(this.files).forEach(path => {
-        if (this.files[path].type === 'folder') {
-            folders.add(path);
-        }
-        if (path.includes('/')) {
-            const parts = path.split('/');
-            let currentPath = '';
-            for (let i = 0; i < parts.length - 1; i++) {
-                if (parts[i]) {
-                    currentPath = currentPath ? currentPath + parts[i] + '/' : parts[i] + '/';
-                    folders.add(currentPath);
-                }
-            }
-        }
-    });
-
-    folders.delete('');
-    folders.delete('/');
-
-    const sortedFolders = Array.from(folders).sort((a, b) => {
-        const depthA = a.split('/').filter(p => p).length;
-        const depthB = b.split('/').filter(p => p).length;
-        if (depthA !== depthB) return depthA - depthB;
-        return a.localeCompare(b);
-    });
-
-    sortedFolders.forEach(folder => {
-        const depth = folder.split('/').filter(p => p).length;
-        const indent = '  '.repeat(depth);
-        const folderName = folder.split('/').filter(p => p).pop() || folder;
-        const option = document.createElement('option');
-        option.value = folder;
-        option.textContent = `${indent}📁 ${folderName}/`;
-        if (this.currentFolder === folder) option.selected = true;
-        select.appendChild(option);
-    });
-};
-
-app.renderFileTree = function () {
-    const container = document.getElementById('file-tree');
-    if (!container) return;
-    container.innerHTML = '';
-
-    const items = [];
-    Object.keys(this.files).forEach(path => {
-        const fileData = this.files[path];
-        if (fileData.type === 'folder') {
-            if (this.currentFolder === '') {
-                if (!path.slice(0, -1).includes('/')) {
-                    items.push({ path, type: 'folder', data: fileData });
-                }
-            } else {
-                if (path.startsWith(this.currentFolder) && path !== this.currentFolder) {
-                    const remaining = path.slice(this.currentFolder.length);
-                    if (remaining && !remaining.slice(0, -1).includes('/')) {
-                        items.push({ path, type: 'folder', data: fileData });
-                    }
-                }
-            }
-        } else {
-            if (this.currentFolder === '') {
-                if (!path.includes('/')) {
-                    items.push({ path, type: 'file', data: fileData });
-                }
-            } else {
-                if (path.startsWith(this.currentFolder)) {
-                    const remaining = path.slice(this.currentFolder.length);
-                    if (remaining && !remaining.includes('/')) {
-                        items.push({ path, type: 'file', data: fileData });
-                    }
-                }
-            }
-        }
-    });
-
-    items.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.path.localeCompare(b.path);
-    });
-
-    if (this.currentFolder !== '') {
-        const parentDiv = document.createElement('div');
-        parentDiv.className = 'tree-item';
-        parentDiv.style.opacity = '0.7';
-        parentDiv.innerHTML = `<span class="chevron" style="visibility: hidden;"></span><i class="fas fa-level-up-alt icon" style="color: #94a3b8;"></i><span class="name">.. (parent directory)</span>`;
-        parentDiv.onclick = () => {
-            const parentPath = this.currentFolder.split('/').filter(Boolean).slice(0, -1).join('/');
-            this.changeFolder(parentPath ? parentPath + '/' : '');
-        };
-        container.appendChild(parentDiv);
-    }
-
-    items.forEach(item => {
-        const div = document.createElement('div');
-        div.className = `tree-item ${this.currentFile === item.path ? 'active' : ''}`;
-
-        const isFolder = item.type === 'folder';
-        const name = isFolder
-            ? item.path.replace(/\/$/, '').split('/').pop()
-            : item.path.split('/').pop();
-
-        const fileExt = !isFolder ? name.split('.').pop() : '';
-        let iconClass = 'fa-file-code';
-        let iconColor = '#94a3b8';
-
-        if (isFolder) {
-            iconClass = 'fa-folder';
-            iconColor = '#eab308';
-        } else if (fileExt === 'html') {
-            iconClass = 'fa-html5';
-            iconColor = '#fb923c';
-        } else if (fileExt === 'css') {
-            iconClass = 'fa-css3';
-            iconColor = '#60a5fa';
-        } else if (fileExt === 'js') {
-            iconClass = 'fa-js';
-            iconColor = '#facc15';
-        } else if (fileExt === 'json') {
-            iconClass = 'fa-code';
-            iconColor = '#a78bfa';
-        } else if (fileExt === 'md') {
-            iconClass = 'fa-markdown';
-            iconColor = '#64748b';
-        }
-
-        div.innerHTML = `<span class="chevron" style="visibility: ${isFolder ? 'visible' : 'hidden'};"></span>
-                       <i class="fas ${iconClass} icon" style="color: ${iconColor};"></i>
-                       <span class="name">${name}</span>`;
-
-        if (isFolder) {
-            div.onclick = (e) => {
-                e.stopPropagation();
-                this.changeFolder(item.path);
-            };
-        } else {
-            div.onclick = () => this.openFile(item.path);
-        }
-
-        container.appendChild(div);
-    });
-
-    if (items.length === 0 && this.currentFolder !== '') {
-        const emptyDiv = document.createElement('div');
-        emptyDiv.className = 'text-xs text-slate-500 text-center p-4';
-        emptyDiv.innerHTML = '<i class="fas fa-folder-open"></i> Empty folder';
-        container.appendChild(emptyDiv);
-    }
-};
-
-app.openFile = function (filename) {
-    if (this.files[filename]?.type === 'folder') return;
-
-    this.currentFile = filename;
-    const emptyState = document.getElementById('empty-state');
-    if (emptyState) emptyState.style.display = 'none';
-
-    const content = this.files[filename]?.content || '';
-    const language = this.getLanguage ? this.getLanguage(filename) : 'plaintext';
-
-    if (this.useFallbackEditor) {
-        document.getElementById('fallback-editor').value = content;
-    } else if (this.editor) {
-        const model = monaco.editor.createModel(content, language);
-        this.editor.setModel(model);
-        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
-    }
-
-    if (typeof this.renderTabs === 'function') this.renderTabs();
-    this.renderFileTree();
-    if (filename.endsWith('.html') && typeof this.updatePreview === 'function') {
-        this.updatePreview();
-    }
-};
-
-app.changeFolder = function (folder) {
-    this.currentFolder = folder;
-    this.saveToStorage();
-    this.renderFileTree();
 };
 
 app.callAI = async function (message) {
@@ -829,113 +554,6 @@ app.updateProviderHelp = function () {
 
     const corsWarning = document.getElementById('cors-warning');
     if (corsWarning && config) corsWarning.style.display = config.cors ? 'block' : 'none';
-
-    const hint = document.getElementById('api-key-hint');
-    if (hint) {
-        if (provider === 'kimi') {
-            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
-            hint.style.color = '#fbbf24';
-        } else if (provider === 'deepseek') {
-            hint.textContent = 'Deepseek: Requires paid credits';
-            hint.style.color = '#f87171';
-        } else if (provider === 'local') {
-            hint.textContent = '✨ No API key needed - runs locally on your machine!';
-            hint.style.color = '#10b981';
-        } else {
-            hint.textContent = 'Enter your API key for the selected provider';
-            hint.style.color = '#64748b';
-        }
-    }
-};
-
-app.updateEditorTheme = function () {
-    this.settings.theme = document.getElementById('editor-theme').value;
-    if (this.editor) {
-        monaco.editor.setTheme(this.settings.theme);
-    }
-    this.saveToStorage();
-};
-
-app.saveToStorage = function () {
-    const data = {
-        files: this.files,
-        versions: this.versions,
-        github: this.github,
-        ai: this.ai,
-        settings: this.settings,
-        expandedFolders: Array.from(this.expandedFolders),
-        currentFolder: this.currentFolder,
-        currentFile: this.currentFile
-    };
-
-    if (window.isElectron && window.require) {
-        try {
-            const Store = window.require('electron-store');
-            const store = new Store();
-            store.set('devstudio-data', data);
-        } catch (e) {
-            console.error('Electron store error:', e);
-            localStorage.setItem('devstudio_data', JSON.stringify(data));
-        }
-    } else {
-        localStorage.setItem('devstudio_data', JSON.stringify(data));
-    }
-};
-
-app.showToast = function (message, duration = 3000) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${message}`;
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-};
-
-app.closeModal = function (id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.add('hidden');
-};
-
-app.updateProviderUI = function () {
-    const badge = document.getElementById('active-provider');
-    const provider = this.ai.provider;
-    const badgeClass = provider === 'kimi' ? 'badge-kimi' :
-        provider === 'deepseek' ? 'badge-deepseek' :
-            provider === 'anthropic' ? 'badge-anthropic' :
-                provider === 'google' ? 'badge-google' :
-                    provider === 'local' ? 'badge-local' : 'badge-openai';
-
-    if (badge) {
-        badge.className = `provider-badge ${badgeClass}`;
-        badge.textContent = provider === 'local' ? 'Ollama' : this.providers[provider]?.name || provider;
-        badge.style.display = 'inline-flex';
-    }
-};
-
-app.handleProviderChange = function () {
-    const provider = document.getElementById('ai-provider').value;
-    const config = this.providers[provider];
-    const modelInput = document.getElementById('ai-model');
-    const endpointContainer = document.getElementById('local-endpoint-container');
-
-    if (provider === 'local' && endpointContainer) {
-        endpointContainer.style.display = 'block';
-        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
-    } else if (endpointContainer) {
-        endpointContainer.style.display = 'none';
-        if (modelInput && config) modelInput.placeholder = config.models[0];
-    }
-
-    const helpText = document.getElementById('provider-help');
-    if (helpText && config) helpText.textContent = config.help;
-
-    const corsWarning = document.getElementById('cors-warning');
-    if (corsWarning) {
-        corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
-    }
 
     const hint = document.getElementById('api-key-hint');
     if (hint) {
