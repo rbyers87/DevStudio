@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-editor.js
-// Fixed for Electron with nodeIntegration: true
+// FIXED: Proper CDN loading for Electron
 // ============================================================
 
 app.initMonaco = function () {
@@ -8,85 +8,49 @@ app.initMonaco = function () {
         const editorElement = document.getElementById('monaco-editor');
         const fallbackEditor = document.getElementById('fallback-editor');
 
-        // Check if we should force fallback (set this flag to test)
-        if (window.forceFallbackEditor) {
-            console.log('Force fallback editor enabled');
+        // FOR ELECTRON: Use fallback editor (Monaco CDN doesn't work well in Electron)
+        if (window.isElectron) {
+            console.log('Electron detected - using fallback editor for reliability');
             this.setupFallbackEditor(fallbackEditor);
             resolve(false);
             return;
         }
 
-        // For Electron with nodeIntegration, we need a different approach
-        if (window.isElectron) {
-            console.log('Running in Electron, loading Monaco...');
+        // Browser version - use CDN
+        try {
+            // Use the correct absolute URL for Monaco
+            const monacoUrl = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs';
 
-            // First, check if monaco is already loaded
-            if (typeof monaco !== 'undefined' && monaco.editor) {
-                console.log('Monaco already loaded globally');
+            require.config({
+                paths: { 'vs': monacoUrl },
+                urlArgs: 'v=' + Date.now() // Prevent caching issues
+            });
+
+            require(['vs/editor/editor.main'], () => {
                 this.setupMonacoEditor(editorElement, fallbackEditor);
                 resolve(true);
-                return;
-            }
-
-            // Load Monaco using script tag (works better in Electron)
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.js';
-            script.onload = () => {
-                console.log('Monaco loader script loaded');
-                try {
-                    require.config({
-                        paths: {
-                            'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs'
-                        }
-                    });
-                    require(['vs/editor/editor.main'], () => {
-                        console.log('Monaco editor loaded');
-                        this.setupMonacoEditor(editorElement, fallbackEditor);
-                        resolve(true);
-                    });
-                } catch (err) {
-                    console.error('Require config error:', err);
-                    this.setupFallbackEditor(fallbackEditor);
-                    resolve(false);
-                }
-            };
-            script.onerror = (err) => {
-                console.error('Failed to load Monaco loader script:', err);
-                this.setupFallbackEditor(fallbackEditor);
-                resolve(false);
-            };
-            document.head.appendChild(script);
-        } else {
-            // Browser version
-            try {
-                require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs' } });
-                require(['vs/editor/editor.main'], () => {
-                    this.setupMonacoEditor(editorElement, fallbackEditor);
-                    resolve(true);
-                });
-            } catch (error) {
-                console.error('Monaco loader error:', error);
-                this.setupFallbackEditor(fallbackEditor);
-                resolve(false);
-            }
+            });
+        } catch (error) {
+            console.error('Monaco loader error:', error);
+            this.setupFallbackEditor(fallbackEditor);
+            resolve(false);
         }
 
-        // Timeout fallback - if Monaco doesn't load within 10 seconds, use fallback
+        // Timeout fallback
         setTimeout(() => {
             if (!this.monacoLoaded && !this.useFallbackEditor) {
-                console.warn('Monaco editor load timeout after 10 seconds');
+                console.warn('Monaco editor load timeout');
                 this.useFallbackEditor = true;
                 this.setupFallbackEditor(fallbackEditor);
                 resolve(false);
             }
-        }, 10000);
+        }, 5000);
     });
 };
 
 app.setupMonacoEditor = function (editorElement, fallbackEditor) {
     try {
-        // Ensure the container has dimensions
-        if (editorElement && (editorElement.offsetWidth === 0 || editorElement.offsetHeight === 0)) {
+        if (editorElement) {
             editorElement.style.width = '100%';
             editorElement.style.height = '100%';
         }
@@ -106,21 +70,9 @@ app.setupMonacoEditor = function (editorElement, fallbackEditor) {
             renderWhitespace: 'selection'
         });
 
-        // Force layout after a short delay
-        setTimeout(() => {
-            if (this.editor) {
-                this.editor.layout();
-                console.log('Monaco editor layout complete');
-            }
-        }, 100);
+        setTimeout(() => { if (this.editor) this.editor.layout(); }, 100);
+        setTimeout(() => { if (this.editor) this.editor.layout(); }, 500);
 
-        setTimeout(() => {
-            if (this.editor) {
-                this.editor.layout();
-            }
-        }, 500);
-
-        // Handle content changes
         let timeout;
         this.editor.onDidChangeModelContent(() => {
             if (this.currentFile && this.files[this.currentFile]) {
@@ -129,9 +81,7 @@ app.setupMonacoEditor = function (editorElement, fallbackEditor) {
                     this.files[this.currentFile].content = this.editor.getValue();
                     this.saveToStorage();
                     if (this.isPreviewable && this.isPreviewable(this.currentFile)) {
-                        if (typeof this.updatePreview === 'function') {
-                            this.updatePreview();
-                        }
+                        if (typeof this.updatePreview === 'function') this.updatePreview();
                     }
                 }, 800);
             }
@@ -140,7 +90,7 @@ app.setupMonacoEditor = function (editorElement, fallbackEditor) {
         this.monacoLoaded = true;
         if (editorElement) editorElement.style.display = 'block';
         if (fallbackEditor) fallbackEditor.style.display = 'none';
-        console.log('Monaco editor setup complete');
+        console.log('Monaco editor loaded successfully');
 
     } catch (monacoError) {
         console.error('Monaco editor creation error:', monacoError);
@@ -150,7 +100,7 @@ app.setupMonacoEditor = function (editorElement, fallbackEditor) {
 };
 
 app.setupFallbackEditor = function (fallbackEditor) {
-    console.log('Setting up fallback editor');
+    console.log('Setting up fallback text editor');
     const editorElement = document.getElementById('monaco-editor');
     if (editorElement) editorElement.style.display = 'none';
 
@@ -160,17 +110,24 @@ app.setupFallbackEditor = function (fallbackEditor) {
         fallbackEditor.style.height = '100%';
         fallbackEditor.style.background = '#1e1e1e';
         fallbackEditor.style.color = '#d4d4d4';
-        fallbackEditor.style.fontFamily = 'Consolas, monospace';
+        fallbackEditor.style.fontFamily = 'Consolas, "Courier New", monospace';
         fallbackEditor.style.fontSize = '13px';
         fallbackEditor.style.padding = '10px';
         fallbackEditor.style.border = 'none';
         fallbackEditor.style.resize = 'none';
+        fallbackEditor.style.outline = 'none';
 
-        // Remove existing listeners to avoid duplicates
-        fallbackEditor.removeEventListener('input', this._fallbackInputHandler);
+        // Clear existing content
+        if (this.currentFile && this.files[this.currentFile]) {
+            fallbackEditor.value = this.files[this.currentFile].content || '';
+        }
 
-        // Create and store the handler
-        this._fallbackInputHandler = (e) => {
+        // Remove existing listener to avoid duplicates
+        if (this._fallbackHandler) {
+            fallbackEditor.removeEventListener('input', this._fallbackHandler);
+        }
+
+        this._fallbackHandler = (e) => {
             if (this.currentFile && this.files[this.currentFile]) {
                 this.files[this.currentFile].content = e.target.value;
                 this.saveToStorage();
@@ -182,8 +139,8 @@ app.setupFallbackEditor = function (fallbackEditor) {
             }
         };
 
-        fallbackEditor.addEventListener('input', this._fallbackInputHandler);
-        this.showToast('Using fallback text editor (Monaco failed to load)', 5000);
+        fallbackEditor.addEventListener('input', this._fallbackHandler);
+        this.showToast('Using text editor (Monaco not available in desktop app)', 3000);
     }
     this.useFallbackEditor = true;
 };
@@ -204,9 +161,7 @@ app.setEditorContent = function (content) {
         const language = this.currentFile ? this.getLanguage(this.currentFile) : 'javascript';
         const model = monaco.editor.createModel(content, language);
         this.editor.setModel(model);
-        setTimeout(() => {
-            if (this.editor) this.editor.layout();
-        }, 50);
+        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
     }
 };
 

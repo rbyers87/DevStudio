@@ -84,10 +84,29 @@ const app = {
     // ============================================================
 
     async init() {
+        console.log('=== INIT START ===');
+
+        // FORCE FALLBACK EDITOR FOR ELECTRON DESKTOP
+        if (window.isElectron) {
+            console.log('Electron detected - using fallback editor');
+            this.useFallbackEditor = true;
+            // Don't try to load Monaco in Electron
+            this.monacoLoaded = false;
+        }
+
         this.loadFromStorage();
         this.setupEventListeners();
 
-        await this.initMonaco();
+        // Only try to load Monaco if not in Electron
+        if (!window.isElectron) {
+            await this.initMonaco();
+        } else {
+            // Setup fallback editor directly
+            const fallbackEditor = document.getElementById('fallback-editor');
+            if (fallbackEditor) {
+                this.setupFallbackEditor(fallbackEditor);
+            }
+        }
 
         this.renderFileTree();
         this.renderVersions();
@@ -118,7 +137,7 @@ const app = {
             if (emptyState) emptyState.style.display = 'flex';
         }
 
-        this.showToast('DevStudio Ready! Ollama integration active.');
+        this.showToast('DevStudio Ready!');
         setTimeout(() => this.testOllamaConnection(), 500);
     },
 
