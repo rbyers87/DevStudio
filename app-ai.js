@@ -1,6 +1,7 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider logic & chat (COMPLETE + DEBUG)
+// AI provider logic - Natural responses + automatic file operations
+// COMPLETE VERSION - Includes all helper methods
 // ============================================================
 
 app.saveAISettings = function () {
@@ -97,6 +98,10 @@ app.addChatMessage = function (text, sender) {
     const div = document.createElement('div');
     div.className = `chat-bubble ${sender}`;
     let formattedText = text.replace(/\n/g, '<br>');
+    // Preserve code blocks
+    formattedText = formattedText.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
+        return `<pre style="background:#0f172a; padding:10px; border-radius:8px; overflow-x:auto; margin:8px 0;"><code style="font-family:monospace; font-size:12px;">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+    });
     div.innerHTML = formattedText;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
@@ -121,48 +126,43 @@ app.sendMessage = async function () {
     try {
         const response = await this.callAI(message);
 
-        // DEBUG: Log the raw response to console
-        console.log('===== AI RAW RESPONSE =====');
-        console.log(response);
-        console.log('===========================');
+        // Show AI's natural response first
+        let cleanResponse = response;
 
-        // Parse the response for file operations
-        const operations = this.parseAIResponseForOperations(response);
-
-        console.log('Parsed operations:', operations);
+        // Extract and apply any file operations
+        const operations = this.extractFileOperations(response);
 
         if (operations && operations.length > 0) {
+            // Remove the JSON/operation parts from displayed response
+            cleanResponse = this.removeOperationBlocks(cleanResponse);
+
+            if (cleanResponse.trim()) {
+                this.addChatMessage(cleanResponse, 'ai');
+            }
+
             if (this.ai.autoApply) {
                 const results = this.applyFileOperations(operations);
-                let summary = `**Applied ${results.success.length} changes:**\n`;
+                let summary = `\n\n📁 **File changes applied:**\n`;
                 results.success.forEach(s => summary += `• ${s}\n`);
                 if (results.failed.length > 0) {
-                    summary += `\n**Failed:**\n`;
+                    summary += `\n❌ **Failed:**\n`;
                     results.failed.forEach(f => summary += `• ${f}\n`);
                 }
                 this.addChatMessage(summary, 'system');
                 this.showToast(`Applied ${results.success.length} file changes`);
 
-                const affectedFile = operations.find(op => op.path === this.currentFile);
-                if (affectedFile && affectedFile.content) {
+                // Refresh UI
+                if (operations.some(op => op.path === this.currentFile)) {
                     this.openFile(this.currentFile);
                 }
                 this.renderFileTree();
                 this.updateFolderSelector();
             } else {
-                this.addChatMessage(response, 'ai');
                 this.showApplyButton(operations);
             }
         } else {
-            // Just show the response
-            let cleanResponse = response;
-            cleanResponse = cleanResponse.replace(/```json\s*[\s\S]*?\s*```/g, '');
-            cleanResponse = cleanResponse.replace(/\{\s*"(?:file|content|operations|action|path)"[\s\S]*?\}/g, '');
-            if (cleanResponse.trim()) {
-                this.addChatMessage(cleanResponse || "Response received (no file changes detected).", 'ai');
-            } else {
-                this.addChatMessage("No file changes were made. Please be more specific about what you want to create or modify.", 'ai');
-            }
+            // No operations, just show the natural response
+            this.addChatMessage(cleanResponse || "I've processed your request.", 'ai');
         }
     } catch (error) {
         console.error('AI Error:', error);
@@ -170,14 +170,9 @@ app.sendMessage = async function () {
 
         if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
             if (this.ai.provider === 'local') {
-                errorMsg = `❌ Cannot connect to Ollama.\n\nPlease ensure:\n1. Ollama is running (check system tray/terminal)\n2. Run: ollama serve\n3. Model '${this.ai.model}' is installed\n4. Run: ollama pull ${this.ai.model}\n5. Using correct endpoint: ${this.ai.endpoint}`;
+                errorMsg = `❌ Cannot connect to Ollama.\n\nPlease ensure:\n1. Ollama is running (check system tray/terminal)\n2. Run: ollama serve\n3. Model '${this.ai.model}' is installed\n4. Run: ollama pull ${this.ai.model}`;
             } else {
-                const provider = this.providers[this.ai.provider];
-                if (provider?.cors) {
-                    errorMsg = `CORS Error: ${this.ai.provider} blocks browser requests. Switch to local Ollama or use a CORS extension.`;
-                } else {
-                    errorMsg = `Network error: ${error.message}. Check your API key and internet connection.`;
-                }
+                errorMsg = `Network error: ${error.message}. Check your API key and internet connection.`;
             }
         }
 
@@ -187,165 +182,131 @@ app.sendMessage = async function () {
     }
 };
 
-// Parse AI response to extract file operations - Supports multiple JSON formats
-app.parseAIResponseForOperations = function (response) {
+// Extract file operations from AI's natural response
+app.extractFileOperations = function (response) {
     const operations = [];
 
-    // Try to find any JSON object in the response
-    const jsonMatches = response.match(/\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}/g);
+    // Look for JSON blocks
+    const jsonRegex = /```json\s*([\s\S]*?)\s*```/g;
+    let match;
 
-    console.log('JSON matches found:', jsonMatches);
-
-    if (jsonMatches) {
-        for (const jsonStr of jsonMatches) {
-            try {
-                const data = JSON.parse(jsonStr);
-                console.log('Parsed JSON data:', data);
-
-                // Format 1: {"file": "path.html", "content": "..."}
-                if (data.file && data.content !== undefined) {
-                    operations.push({
-                        action: 'create',
-                        path: data.file,
-                        content: data.content
-                    });
-                }
-                // Format 2: {"operations": [{"action": "...", "path": "...", "content": "..."}]}
-                else if (data.operations && Array.isArray(data.operations)) {
-                    operations.push(...data.operations);
-                }
-                // Format 3: {"path": "path.html", "content": "...", "action": "..."}
-                else if (data.path && data.content !== undefined) {
-                    operations.push({
-                        action: data.action || 'update',
-                        path: data.path,
-                        content: data.content
-                    });
-                }
-                // Format 4: {"filename": "path.html", "code": "..."}
-                else if (data.filename && data.code) {
-                    operations.push({
-                        action: 'create',
-                        path: data.filename,
-                        content: data.code
-                    });
-                }
-                // Format 5: {"name": "path.html", "content": "..."}
-                else if (data.name && data.content !== undefined) {
-                    operations.push({
-                        action: 'create',
-                        path: data.name,
-                        content: data.content
-                    });
-                }
-                // Format 6: Direct array of operations
-                else if (Array.isArray(data)) {
-                    for (const item of data) {
-                        if (item.path && (item.content !== undefined || item.action === 'delete')) {
-                            operations.push({
-                                action: item.action || 'update',
-                                path: item.path,
-                                content: item.content || ''
-                            });
-                        }
-                    }
-                }
-            } catch (e) {
-                console.log('JSON parse error:', e);
+    while ((match = jsonRegex.exec(response)) !== null) {
+        try {
+            const data = JSON.parse(match[1]);
+            if (data.operations && Array.isArray(data.operations)) {
+                operations.push(...data.operations);
+            } else if (data.file && data.content) {
+                operations.push({ action: data.action || 'create', path: data.file, content: data.content });
+            } else if (data.path && data.content) {
+                operations.push({ action: data.action || 'update', path: data.path, content: data.content });
+            } else if (data.filename && data.content) {
+                operations.push({ action: 'create', path: data.filename, content: data.content });
             }
+        } catch (e) {
+            console.log('JSON parse error:', e);
         }
     }
 
-    // Also look for markdown code blocks as fallback
-    if (operations.length === 0) {
-        const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
-        let match;
-        let suggestedFile = null;
+    // Look for code blocks with file indicators
+    const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
+    let filePath = null;
 
-        // Try to find filename before the code block
-        const fileMatch = response.match(/(?:file|create|update)\s+['"]?([\w\/\\]+\.\w+)['"]?/i);
-        if (fileMatch) {
-            suggestedFile = fileMatch[1];
-        }
+    // Try to find a file path mentioned before the code block
+    const pathMatches = response.match(/(?:file|create|update|modify)\s+['"]?([\w\/\\]+\.\w+)['"]?/gi);
 
-        while ((match = codeBlockRegex.exec(response)) !== null) {
-            const language = match[1];
-            const content = match[2];
+    let blockIndex = 0;
+    while ((match = codeBlockRegex.exec(response)) !== null) {
+        const language = match[1];
+        const content = match[2];
 
-            if (suggestedFile) {
-                operations.push({
-                    action: 'update',
-                    path: suggestedFile,
-                    content: content
-                });
-            } else if (language === 'html') {
-                operations.push({
-                    action: 'create',
-                    path: 'index.html',
-                    content: content
-                });
-            } else if (language === 'css') {
-                operations.push({
-                    action: 'create',
-                    path: 'style.css',
-                    content: content
-                });
-            } else if (language === 'javascript' || language === 'js') {
-                operations.push({
-                    action: 'create',
-                    path: 'script.js',
-                    content: content
-                });
+        // Get the file path from context if available
+        if (pathMatches && pathMatches[blockIndex]) {
+            const extractedPath = pathMatches[blockIndex].match(/['"]?([\w\/\\]+\.\w+)['"]?/);
+            if (extractedPath) {
+                filePath = extractedPath[1];
             }
         }
+
+        if (filePath) {
+            operations.push({
+                action: 'update',
+                path: filePath,
+                content: content
+            });
+            filePath = null;
+        } else if (content.includes('<!DOCTYPE html') || content.includes('<html')) {
+            operations.push({ action: 'create', path: 'index.html', content: content });
+        } else if (language === 'css') {
+            operations.push({ action: 'create', path: 'style.css', content: content });
+        } else if (language === 'javascript' || language === 'js') {
+            operations.push({ action: 'create', path: 'script.js', content: content });
+        } else if (language === 'html') {
+            operations.push({ action: 'create', path: 'page.html', content: content });
+        }
+
+        blockIndex++;
     }
 
     return operations;
 };
 
-// Show apply button for operations
+// Remove operation blocks from displayed text
+app.removeOperationBlocks = function (text) {
+    // Remove JSON blocks
+    text = text.replace(/```json\s*[\s\S]*?\s*```/g, '');
+    // Remove any stray JSON objects that might be visible
+    text = text.replace(/\{\s*"operations"\s*:\s*\[[\s\S]*?\]\s*\}/g, '');
+    text = text.replace(/\{\s*"file"\s*:\s*"[^"]*"\s*,\s*"content"\s*:\s*"[^"]*"\s*\}/g, '');
+    text = text.replace(/\{\s*"path"\s*:\s*"[^"]*"\s*,\s*"content"\s*:\s*"[^"]*"\s*\}/g, '');
+    // Clean up extra whitespace
+    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    return text.trim();
+};
+
+// Show apply button for manual approval
 app.showApplyButton = function (operations) {
     const container = document.getElementById('chat-messages');
     const buttonDiv = document.createElement('div');
     buttonDiv.className = 'chat-bubble system';
     buttonDiv.style.padding = '12px';
-    buttonDiv.style.textAlign = 'center';
     buttonDiv.style.background = '#1e293b';
     buttonDiv.style.border = '1px solid #3b82f6';
+    buttonDiv.style.borderRadius = '12px';
 
-    let opsList = '<div style="text-align: left; margin-bottom: 12px; font-size: 12px;"><strong>📁 Ready to apply:</strong><br>';
+    let opsList = '<div style="margin-bottom: 12px;"><strong>📁 Ready to apply these changes?</strong><br>';
     operations.forEach(op => {
-        const actionIcon = op.action === 'delete' ? '🗑️' : (op.action === 'create' ? '✨' : '📝');
-        opsList += `• ${actionIcon} ${op.action}: <code>${op.path}</code><br>`;
+        const icon = op.action === 'delete' ? '🗑️' : (op.action === 'create' ? '✨' : '📝');
+        opsList += `&nbsp;&nbsp;${icon} ${op.action}: <code>${op.path}</code><br>`;
     });
     opsList += '</div>';
 
     const applyBtn = document.createElement('button');
     applyBtn.className = 'btn btn-primary';
-    applyBtn.style.padding = '8px 20px';
-    applyBtn.style.fontSize = '13px';
+    applyBtn.style.padding = '6px 16px';
+    applyBtn.style.fontSize = '12px';
     applyBtn.style.marginRight = '8px';
-    applyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Apply Changes';
+    applyBtn.innerHTML = '✅ Apply Changes';
     applyBtn.onclick = () => {
         const results = this.applyFileOperations(operations);
-        let summary = `✅ Applied ${results.success.length} changes:\n`;
-        results.success.forEach(s => summary += `• ${s}\n`);
+        let summary = `✅ Applied ${results.success.length} changes.`;
         if (results.failed.length > 0) {
-            summary += `\n❌ Failed:\n`;
-            results.failed.forEach(f => summary += `• ${f}\n`);
+            summary += `\n❌ Failed: ${results.failed.length}`;
         }
         this.addChatMessage(summary, 'system');
         this.showToast(`Applied ${results.success.length} file changes`);
         buttonDiv.remove();
         this.renderFileTree();
         this.updateFolderSelector();
+        if (operations.some(op => op.path === this.currentFile)) {
+            this.openFile(this.currentFile);
+        }
     };
 
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'btn btn-secondary';
-    dismissBtn.style.padding = '8px 20px';
-    dismissBtn.style.fontSize = '13px';
-    dismissBtn.innerHTML = '<i class="fas fa-times"></i> Dismiss';
+    dismissBtn.style.padding = '6px 16px';
+    dismissBtn.style.fontSize = '12px';
+    dismissBtn.innerHTML = '❌ Dismiss';
     dismissBtn.onclick = () => buttonDiv.remove();
 
     buttonDiv.innerHTML = opsList;
@@ -353,6 +314,267 @@ app.showApplyButton = function (operations) {
     buttonDiv.appendChild(dismissBtn);
     container.appendChild(buttonDiv);
     container.scrollTop = container.scrollHeight;
+};
+
+// Helper method to get project context (calls from app-core.js)
+app.getProjectContext = function () {
+    let context = '# Full Project Context\n\n';
+    let totalSize = 0;
+    const MAX_SIZE = 10240;
+
+    for (const [path, fileData] of Object.entries(this.files)) {
+        if (fileData.type === 'file') {
+            const content = fileData.content || '';
+            const size = content.length;
+            totalSize += Math.min(size, MAX_SIZE);
+
+            context += `## File: ${path}\n`;
+            if (size > MAX_SIZE) {
+                context += `[File truncated: ${(size / 1024).toFixed(1)}KB, showing first ${(MAX_SIZE / 1024).toFixed(0)}KB]\n`;
+                context += '```\n' + content.substring(0, MAX_SIZE) + '\n```\n\n';
+            } else {
+                context += '```\n' + content + '\n```\n\n';
+            }
+        }
+    }
+
+    context += `\nTotal project size: ${(totalSize / 1024).toFixed(1)}KB\n`;
+    context += `Total files: ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length}\n`;
+
+    return context;
+};
+
+// Helper method to apply file operations
+app.applyFileOperations = function (operations) {
+    const results = { success: [], failed: [] };
+
+    for (const op of operations) {
+        try {
+            switch (op.action) {
+                case 'create':
+                case 'update':
+                    // Ensure parent folders exist
+                    const pathParts = op.path.split('/');
+                    if (pathParts.length > 1) {
+                        let currentPath = '';
+                        for (let i = 0; i < pathParts.length - 1; i++) {
+                            currentPath = currentPath ? currentPath + pathParts[i] + '/' : pathParts[i] + '/';
+                            if (!this.files[currentPath]) {
+                                this.files[currentPath] = { content: null, type: 'folder' };
+                            }
+                        }
+                    }
+                    this.files[op.path] = { content: op.content || '', type: 'file' };
+                    results.success.push(`${op.action} ${op.path}`);
+                    break;
+
+                case 'delete':
+                    if (this.files[op.path]) {
+                        delete this.files[op.path];
+                        results.success.push(`delete ${op.path}`);
+                    } else {
+                        results.failed.push(`delete ${op.path} (file not found)`);
+                    }
+                    break;
+
+                default:
+                    results.failed.push(`unknown action: ${op.action}`);
+            }
+        } catch (error) {
+            results.failed.push(`${op.action} ${op.path}: ${error.message}`);
+        }
+    }
+
+    this.saveToStorage();
+    return results;
+};
+
+// Helper methods for UI updates (call from app-files.js)
+app.updateFolderSelector = function () {
+    const select = document.getElementById('folder-select');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">📁 Root</option>';
+
+    const folders = new Set();
+    Object.keys(this.files).forEach(path => {
+        if (this.files[path].type === 'folder') {
+            folders.add(path);
+        }
+        if (path.includes('/')) {
+            const parts = path.split('/');
+            let currentPath = '';
+            for (let i = 0; i < parts.length - 1; i++) {
+                if (parts[i]) {
+                    currentPath = currentPath ? currentPath + parts[i] + '/' : parts[i] + '/';
+                    folders.add(currentPath);
+                }
+            }
+        }
+    });
+
+    folders.delete('');
+    folders.delete('/');
+
+    const sortedFolders = Array.from(folders).sort((a, b) => {
+        const depthA = a.split('/').filter(p => p).length;
+        const depthB = b.split('/').filter(p => p).length;
+        if (depthA !== depthB) return depthA - depthB;
+        return a.localeCompare(b);
+    });
+
+    sortedFolders.forEach(folder => {
+        const depth = folder.split('/').filter(p => p).length;
+        const indent = '  '.repeat(depth);
+        const folderName = folder.split('/').filter(p => p).pop() || folder;
+        const option = document.createElement('option');
+        option.value = folder;
+        option.textContent = `${indent}📁 ${folderName}/`;
+        if (this.currentFolder === folder) option.selected = true;
+        select.appendChild(option);
+    });
+};
+
+app.renderFileTree = function () {
+    const container = document.getElementById('file-tree');
+    if (!container) return;
+    container.innerHTML = '';
+
+    const items = [];
+    Object.keys(this.files).forEach(path => {
+        const fileData = this.files[path];
+        if (fileData.type === 'folder') {
+            if (this.currentFolder === '') {
+                if (!path.slice(0, -1).includes('/')) {
+                    items.push({ path, type: 'folder', data: fileData });
+                }
+            } else {
+                if (path.startsWith(this.currentFolder) && path !== this.currentFolder) {
+                    const remaining = path.slice(this.currentFolder.length);
+                    if (remaining && !remaining.slice(0, -1).includes('/')) {
+                        items.push({ path, type: 'folder', data: fileData });
+                    }
+                }
+            }
+        } else {
+            if (this.currentFolder === '') {
+                if (!path.includes('/')) {
+                    items.push({ path, type: 'file', data: fileData });
+                }
+            } else {
+                if (path.startsWith(this.currentFolder)) {
+                    const remaining = path.slice(this.currentFolder.length);
+                    if (remaining && !remaining.includes('/')) {
+                        items.push({ path, type: 'file', data: fileData });
+                    }
+                }
+            }
+        }
+    });
+
+    items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+        return a.path.localeCompare(b.path);
+    });
+
+    if (this.currentFolder !== '') {
+        const parentDiv = document.createElement('div');
+        parentDiv.className = 'tree-item';
+        parentDiv.style.opacity = '0.7';
+        parentDiv.innerHTML = `<span class="chevron" style="visibility: hidden;"></span><i class="fas fa-level-up-alt icon" style="color: #94a3b8;"></i><span class="name">.. (parent directory)</span>`;
+        parentDiv.onclick = () => {
+            const parentPath = this.currentFolder.split('/').filter(Boolean).slice(0, -1).join('/');
+            this.changeFolder(parentPath ? parentPath + '/' : '');
+        };
+        container.appendChild(parentDiv);
+    }
+
+    items.forEach(item => {
+        const div = document.createElement('div');
+        div.className = `tree-item ${this.currentFile === item.path ? 'active' : ''}`;
+
+        const isFolder = item.type === 'folder';
+        const name = isFolder
+            ? item.path.replace(/\/$/, '').split('/').pop()
+            : item.path.split('/').pop();
+
+        const fileExt = !isFolder ? name.split('.').pop() : '';
+        let iconClass = 'fa-file-code';
+        let iconColor = '#94a3b8';
+
+        if (isFolder) {
+            iconClass = 'fa-folder';
+            iconColor = '#eab308';
+        } else if (fileExt === 'html') {
+            iconClass = 'fa-html5';
+            iconColor = '#fb923c';
+        } else if (fileExt === 'css') {
+            iconClass = 'fa-css3';
+            iconColor = '#60a5fa';
+        } else if (fileExt === 'js') {
+            iconClass = 'fa-js';
+            iconColor = '#facc15';
+        } else if (fileExt === 'json') {
+            iconClass = 'fa-code';
+            iconColor = '#a78bfa';
+        } else if (fileExt === 'md') {
+            iconClass = 'fa-markdown';
+            iconColor = '#64748b';
+        }
+
+        div.innerHTML = `<span class="chevron" style="visibility: ${isFolder ? 'visible' : 'hidden'};"></span>
+                       <i class="fas ${iconClass} icon" style="color: ${iconColor};"></i>
+                       <span class="name">${name}</span>`;
+
+        if (isFolder) {
+            div.onclick = (e) => {
+                e.stopPropagation();
+                this.changeFolder(item.path);
+            };
+        } else {
+            div.onclick = () => this.openFile(item.path);
+        }
+
+        container.appendChild(div);
+    });
+
+    if (items.length === 0 && this.currentFolder !== '') {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'text-xs text-slate-500 text-center p-4';
+        emptyDiv.innerHTML = '<i class="fas fa-folder-open"></i> Empty folder';
+        container.appendChild(emptyDiv);
+    }
+};
+
+app.openFile = function (filename) {
+    if (this.files[filename]?.type === 'folder') return;
+
+    this.currentFile = filename;
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) emptyState.style.display = 'none';
+
+    const content = this.files[filename]?.content || '';
+    const language = this.getLanguage ? this.getLanguage(filename) : 'plaintext';
+
+    if (this.useFallbackEditor) {
+        document.getElementById('fallback-editor').value = content;
+    } else if (this.editor) {
+        const model = monaco.editor.createModel(content, language);
+        this.editor.setModel(model);
+        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
+    }
+
+    if (typeof this.renderTabs === 'function') this.renderTabs();
+    this.renderFileTree();
+    if (filename.endsWith('.html') && typeof this.updatePreview === 'function') {
+        this.updatePreview();
+    }
+};
+
+app.changeFolder = function (folder) {
+    this.currentFolder = folder;
+    this.saveToStorage();
+    this.renderFileTree();
 };
 
 app.callAI = async function (message) {
@@ -365,30 +587,42 @@ app.callAI = async function (message) {
 
     const projectContext = this.getProjectContext();
 
-    let context = `You are DevStudio AI, an expert coding assistant. You have FULL access to all files in the project and can directly modify them.
+    // Natural, unrestricted prompt that lets AI think
+    const context = `You are DevStudio AI, a helpful and intelligent coding assistant integrated into a code editor. You have full access to read and modify all files in the user's project.
 
+Project files:
 ${projectContext}
 
-Current open file: ${fileName} (${fileExt} extension)
-Current code in open file:
+Currently open file: ${fileName}
+Current content:
 \`\`\`${fileExt}
-${currentCode || '(empty file)'}
+${currentCode || '(empty)'}
 \`\`\`
 
-User request: ${message}
+The user is asking for help with their code. You can:
+- Explain code and answer questions
+- Suggest improvements
+- Create new files
+- Modify existing files
+- Delete files when requested
 
-IMPORTANT: When the user asks you to CREATE, MODIFY, UPDATE, or DELETE files, respond with a JSON object.
+When you need to CREATE, UPDATE, or DELETE files, include a JSON block in your response like this:
 
-EXAMPLE for creating a file:
-{"file": "test.html", "content": "<!DOCTYPE html><html><body><h1>Hello</h1></body></html>"}
+\`\`\`json
+{"file": "path/to/file.html", "content": "the complete file content here"}
+\`\`\`
 
-EXAMPLE for updating current file:
-{"file": "${fileName}", "content": "complete updated file content here"}
+For multiple files:
+\`\`\`json
+{"operations": [
+  {"action": "create", "path": "index.html", "content": "..."},
+  {"action": "update", "path": "style.css", "content": "..."}
+]}
+\`\`\`
 
-EXAMPLE for multiple files:
-{"operations": [{"action": "create", "path": "index.html", "content": "..."}, {"action": "update", "path": "style.css", "content": "..."}]}
+Be helpful, think step by step, and provide natural responses. Don't be too rigid - just be a good assistant.
 
-Respond with ONLY the JSON object. No extra text before or after.`;
+User request: ${message}`;
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
@@ -418,12 +652,10 @@ Respond with ONLY the JSON object. No extra text before or after.`;
             }
         } catch (testError) {
             if (testError.name === 'AbortError') {
-                throw new Error(`Ollama timeout at ${ollamaUrl}\n\nMake sure Ollama is running:\n• Windows: Check system tray\n• Mac/Linux: Run 'ollama serve'\n\nThen run: ollama pull ${finalModel}`);
+                throw new Error(`Ollama timeout at ${ollamaUrl}\n\nMake sure Ollama is running:\n• Run 'ollama serve' in terminal\n• Then run: ollama pull ${finalModel}`);
             }
             throw testError;
         }
-
-        console.log(`Calling Ollama: ${ollamaUrl}/api/generate with model ${finalModel}`);
 
         const response = await fetch(`${ollamaUrl}/api/generate`, {
             method: 'POST',
@@ -433,10 +665,9 @@ Respond with ONLY the JSON object. No extra text before or after.`;
                 prompt: context,
                 stream: false,
                 options: {
-                    temperature: 0.3,
-                    num_predict: 4096,
-                    top_p: 0.9,
-                    repeat_penalty: 1.1
+                    temperature: 0.7,
+                    num_predict: 8192,
+                    top_p: 0.9
                 }
             })
         });
@@ -447,16 +678,11 @@ Respond with ONLY the JSON object. No extra text before or after.`;
         }
 
         const data = await response.json();
-        let reply = data.response || "{}";
+        let reply = data.response || "I'm having trouble responding right now. Please try again.";
 
+        // Clean up special tokens
         reply = reply.replace(/<\/?s>/g, '');
         reply = reply.replace(/<\|[^>]+\|>/g, '');
-        reply = reply.replace(/\[\/?INST\]/g, '');
-
-        const jsonMatch = reply.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            reply = jsonMatch[0];
-        }
 
         return reply;
     }
@@ -470,17 +696,17 @@ Respond with ONLY the JSON object. No extra text before or after.`;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'user', content: context }],
-            temperature: 0.3,
-            max_tokens: 4096
+            messages: [{ role: 'system', content: 'You are a helpful coding assistant.' }, { role: 'user', content: context }],
+            temperature: 0.7,
+            max_tokens: 8192
         });
     } else if (provider === 'anthropic') {
         url = config.baseUrl;
         headers = { 'x-api-key': effectiveKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            max_tokens: 4096,
-            temperature: 0.3,
+            max_tokens: 8192,
+            temperature: 0.7,
             messages: [{ role: 'user', content: context }]
         });
     } else if (provider === 'google') {
@@ -489,7 +715,7 @@ Respond with ONLY the JSON object. No extra text before or after.`;
         headers = { 'Content-Type': 'application/json' };
         body = JSON.stringify({
             contents: [{ parts: [{ text: context }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
         });
     } else {
         url = endpoint || config.baseUrl;
@@ -497,7 +723,7 @@ Respond with ONLY the JSON object. No extra text before or after.`;
         body = JSON.stringify({
             model: model || config.defaultModel,
             messages: [{ role: 'user', content: context }],
-            temperature: 0.3
+            temperature: 0.7
         });
     }
 
@@ -509,18 +735,10 @@ Respond with ONLY the JSON object. No extra text before or after.`;
     }
 
     const data = await response.json();
-    let reply = '';
 
-    if (provider === 'anthropic') reply = data.content[0].text;
-    else if (provider === 'google') reply = data.candidates[0].content.parts[0].text;
-    else reply = data.choices[0].message.content;
-
-    const jsonMatch = reply.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        reply = jsonMatch[0];
-    }
-
-    return reply;
+    if (provider === 'anthropic') return data.content[0].text;
+    if (provider === 'google') return data.candidates[0].content.parts[0].text;
+    return data.choices[0].message.content;
 };
 
 app.quickAction = function (action) {
@@ -529,19 +747,19 @@ app.quickAction = function (action) {
 
     switch (action) {
         case 'explain':
-            chatInput.value = `Explain the current file (${this.currentFile || 'no file open'}) in detail`;
+            chatInput.value = `Can you explain how the code in ${this.currentFile || 'the current file'} works and suggest any improvements?`;
             break;
         case 'fix':
-            chatInput.value = `Fix any bugs in the current file and show me the corrected version`;
+            chatInput.value = `Please review ${this.currentFile || 'the current file'} for bugs and help me fix them.`;
             break;
         case 'optimize':
-            chatInput.value = `Optimize the current file for better performance and readability`;
+            chatInput.value = `Can you optimize ${this.currentFile || 'the current file'} for better performance and cleaner code?`;
             break;
         case 'document':
-            chatInput.value = `Add comprehensive documentation comments to the current file`;
+            chatInput.value = `Please add detailed documentation and comments to ${this.currentFile || 'the current file'}.`;
             break;
         case 'test':
-            chatInput.value = `Write unit tests for the current file`;
+            chatInput.value = `Can you write unit tests for ${this.currentFile || 'the current file'}?`;
             break;
         default:
             chatInput.value = action;
@@ -611,6 +829,113 @@ app.updateProviderHelp = function () {
 
     const corsWarning = document.getElementById('cors-warning');
     if (corsWarning && config) corsWarning.style.display = config.cors ? 'block' : 'none';
+
+    const hint = document.getElementById('api-key-hint');
+    if (hint) {
+        if (provider === 'kimi') {
+            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
+            hint.style.color = '#fbbf24';
+        } else if (provider === 'deepseek') {
+            hint.textContent = 'Deepseek: Requires paid credits';
+            hint.style.color = '#f87171';
+        } else if (provider === 'local') {
+            hint.textContent = '✨ No API key needed - runs locally on your machine!';
+            hint.style.color = '#10b981';
+        } else {
+            hint.textContent = 'Enter your API key for the selected provider';
+            hint.style.color = '#64748b';
+        }
+    }
+};
+
+app.updateEditorTheme = function () {
+    this.settings.theme = document.getElementById('editor-theme').value;
+    if (this.editor) {
+        monaco.editor.setTheme(this.settings.theme);
+    }
+    this.saveToStorage();
+};
+
+app.saveToStorage = function () {
+    const data = {
+        files: this.files,
+        versions: this.versions,
+        github: this.github,
+        ai: this.ai,
+        settings: this.settings,
+        expandedFolders: Array.from(this.expandedFolders),
+        currentFolder: this.currentFolder,
+        currentFile: this.currentFile
+    };
+
+    if (window.isElectron && window.require) {
+        try {
+            const Store = window.require('electron-store');
+            const store = new Store();
+            store.set('devstudio-data', data);
+        } catch (e) {
+            console.error('Electron store error:', e);
+            localStorage.setItem('devstudio_data', JSON.stringify(data));
+        }
+    } else {
+        localStorage.setItem('devstudio_data', JSON.stringify(data));
+    }
+};
+
+app.showToast = function (message, duration = 3000) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, duration);
+};
+
+app.closeModal = function (id) {
+    const modal = document.getElementById(id);
+    if (modal) modal.classList.add('hidden');
+};
+
+app.updateProviderUI = function () {
+    const badge = document.getElementById('active-provider');
+    const provider = this.ai.provider;
+    const badgeClass = provider === 'kimi' ? 'badge-kimi' :
+        provider === 'deepseek' ? 'badge-deepseek' :
+            provider === 'anthropic' ? 'badge-anthropic' :
+                provider === 'google' ? 'badge-google' :
+                    provider === 'local' ? 'badge-local' : 'badge-openai';
+
+    if (badge) {
+        badge.className = `provider-badge ${badgeClass}`;
+        badge.textContent = provider === 'local' ? 'Ollama' : this.providers[provider]?.name || provider;
+        badge.style.display = 'inline-flex';
+    }
+};
+
+app.handleProviderChange = function () {
+    const provider = document.getElementById('ai-provider').value;
+    const config = this.providers[provider];
+    const modelInput = document.getElementById('ai-model');
+    const endpointContainer = document.getElementById('local-endpoint-container');
+
+    if (provider === 'local' && endpointContainer) {
+        endpointContainer.style.display = 'block';
+        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
+    } else if (endpointContainer) {
+        endpointContainer.style.display = 'none';
+        if (modelInput && config) modelInput.placeholder = config.models[0];
+    }
+
+    const helpText = document.getElementById('provider-help');
+    if (helpText && config) helpText.textContent = config.help;
+
+    const corsWarning = document.getElementById('cors-warning');
+    if (corsWarning) {
+        corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
+    }
 
     const hint = document.getElementById('api-key-hint');
     if (hint) {
