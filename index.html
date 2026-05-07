@@ -13,6 +13,23 @@
 </head>
 
 <body>
+    <script>
+        // Force fallback editor for testing (set to true to use fallback)
+        window.forceFallbackEditor = false;
+
+        // Log all errors
+        window.addEventListener('error', function (e) {
+            console.error('Global error:', e.message);
+            const statusEl = document.getElementById('ai-status');
+            if (statusEl && e.message.includes('monaco')) {
+                statusEl.innerHTML = '⚠️ Editor Error';
+                statusEl.style.background = '#dc2626';
+            }
+        });
+
+        // Check if we're in Electron
+        console.log('Is Electron:', window.isElectron);
+    </script>
     <div id="app" class="app-grid">
         <header class="header">
             <div class="flex items-center gap-3">
