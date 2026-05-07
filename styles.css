@@ -258,6 +258,39 @@ body {
     flex-shrink: 0;
 }
 
+/* Aggressive chat input fix */
+.chat-input-area {
+    overflow-x: hidden;
+}
+
+#chat-input {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Fix for the container that holds the input and button */
+.chat-input-area .flex.items-center.gap-2,
+.chat-input-area div[style*="display: flex"],
+.chat-input-area div[style*="display:flex"] {
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+}
+
+/* Ensure the entire chat panel respects widths */
+.chat-panel,
+#chat-panel {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Fix text input to never exceed parent */
+input.input,
+.input {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 /* ── Chat bubbles ─────────────────────────────────────────── */
 .chat-bubble {
     max-width: 85%;
