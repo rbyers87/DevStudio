@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider logic & chat
+// AI provider logic & chat (FIXED)
 // ============================================================
 
 app.saveAISettings = function () {
@@ -96,7 +96,13 @@ app.addChatMessage = function (text, sender) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = `chat-bubble ${sender}`;
-    div.innerHTML = text.replace(/\n/g, '<br>');
+    // Preserve formatting and handle code blocks
+    let formattedText = text.replace(/\n/g, '<br>');
+    // Highlight code blocks
+    formattedText = formattedText.replace(/```(\w+)?<br>([\s\S]*?)<br>```/g, (match, lang, code) => {
+        return `<div class="code-block"><pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre></div>`;
+    });
+    div.innerHTML = formattedText;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
 };
@@ -119,25 +125,33 @@ app.sendMessage = async function () {
 
     try {
         const response = await this.callAI(message);
-        this.addChatMessage(response, 'ai');
 
-        const jsonMatch = response.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-            try {
-                const jsonData = JSON.parse(jsonMatch[1]);
-                if (jsonData.operations && Array.isArray(jsonData.operations)) {
-                    if (this.ai.autoApply) {
-                        const results = this.applyFileOperations(jsonData.operations);
-                        const summary = results.success.join('\n') + (results.failed.length ? '\n' + results.failed.join('\n') : '');
-                        this.addChatMessage(`✅ Auto-applied file changes:\n${summary}`, 'system');
-                        this.showToast(`Applied ${results.success.length} file operations`);
-                    } else {
-                        this.addChatMessage(`💡 AI suggested file operations. Enable "Auto-apply AI file changes" in Settings to apply automatically.\n\n\`\`\`json\n${JSON.stringify(jsonData.operations, null, 2)}\n\`\`\``, 'system');
-                    }
+        // Check if response contains file operations
+        const operations = this.extractFileOperations(response);
+
+        if (operations && operations.length > 0) {
+            if (this.ai.autoApply) {
+                const results = this.applyFileOperations(operations);
+                const summary = results.success.join('\n') + (results.failed.length ? '\n\nFailed:\n' + results.failed.join('\n') : '');
+                this.addChatMessage(`✅ Auto-applied file changes:\n${summary}`, 'system');
+                this.showToast(`Applied ${results.success.length} file operations`);
+
+                // If there's also explanatory text, show it too
+                const cleanResponse = this.removeJsonBlock(response);
+                if (cleanResponse.trim()) {
+                    this.addChatMessage(cleanResponse, 'ai');
                 }
-            } catch (e) {
-                console.log('Failed to parse JSON operations:', e);
+            } else {
+                // Show the operations but don't apply automatically
+                this.addChatMessage(response, 'ai');
+                this.addChatMessage(`💡 **AI suggested file operations.** Enable "Auto-apply AI file changes" in Settings to apply automatically.\n\nTo apply now, click the "Apply Changes" button below.`, 'system');
+
+                // Add an "Apply Changes" button
+                this.addApplyButton(operations);
             }
+        } else {
+            // No operations, just show the response
+            this.addChatMessage(response, 'ai');
         }
     } catch (error) {
         console.error('AI Error:', error);
@@ -162,6 +176,80 @@ app.sendMessage = async function () {
     }
 };
 
+// Extract file operations from AI response
+app.extractFileOperations = function (response) {
+    const operations = [];
+
+    // Look for JSON blocks
+    const jsonPattern = /```json\s*([\s\S]*?)\s*```/g;
+    let match;
+
+    while ((match = jsonPattern.exec(response)) !== null) {
+        try {
+            const jsonData = JSON.parse(match[1]);
+            if (jsonData.operations && Array.isArray(jsonData.operations)) {
+                operations.push(...jsonData.operations);
+            }
+            // Also check for direct operations array
+            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].action) {
+                operations.push(...jsonData);
+            }
+        } catch (e) {
+            console.log('Failed to parse JSON block:', e);
+        }
+    }
+
+    // Look for markdown code blocks that might contain file content
+    const codeBlockPattern = /```(\w+)\n([\s\S]*?)```/g;
+    let currentFilePath = null;
+
+    // Also look for file creation patterns in text
+    const fileCreationPattern = /(?:create|update|modify)\s+(?:file\s+)?['"]?([\w\/\\]+\.\w+)['"]?\s*(?:with|to|as)?\s*:?\s*```/gi;
+
+    return operations;
+};
+
+// Remove JSON blocks from response for clean display
+app.removeJsonBlock = function (response) {
+    return response.replace(/```json\s*[\s\S]*?\s*```/g, '');
+};
+
+// Add apply button to chat
+app.addApplyButton = function (operations) {
+    const container = document.getElementById('chat-messages');
+    const buttonDiv = document.createElement('div');
+    buttonDiv.className = 'chat-bubble system';
+    buttonDiv.style.padding = '8px';
+    buttonDiv.style.textAlign = 'center';
+
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-primary';
+    applyBtn.style.padding = '6px 16px';
+    applyBtn.style.fontSize = '12px';
+    applyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Apply Suggested Changes';
+    applyBtn.onclick = () => {
+        const results = this.applyFileOperations(operations);
+        const summary = results.success.join('\n') + (results.failed.length ? '\n\nFailed:\n' + results.failed.join('\n') : '');
+        this.addChatMessage(`✅ Applied file changes:\n${summary}`, 'system');
+        this.showToast(`Applied ${results.success.length} file operations`);
+        buttonDiv.remove();
+    };
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.style.padding = '6px 16px';
+    cancelBtn.style.fontSize = '12px';
+    cancelBtn.style.marginLeft = '8px';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i> Dismiss';
+    cancelBtn.onclick = () => buttonDiv.remove();
+
+    buttonDiv.appendChild(applyBtn);
+    buttonDiv.appendChild(cancelBtn);
+    container.appendChild(buttonDiv);
+    container.scrollTop = container.scrollHeight;
+};
+
+// Enhanced callAI with better instructions for file operations
 app.callAI = async function (message) {
     const { provider, apiKey, model, endpoint } = this.ai;
     const config = this.providers[provider];
@@ -177,15 +265,41 @@ app.callAI = async function (message) {
     context += `\n\nCurrent open file: ${fileName} (${fileExt} extension)`;
     context += `\nCurrent code in open file:\n\`\`\`${fileExt}\n${currentCode || '(empty file)'}\n\`\`\``;
     context += `\n\nUser request: ${message}`;
-    context += `\n\nIMPORTANT: When the user asks you to create, modify, or delete files, respond with a JSON block containing operations.`;
-    context += `\n\nExample JSON response for a file change:\n\`\`\`json\n{\n  "operations": [\n    { "action": "update", "path": "index.html", "content": "new html content" },\n    { "action": "create", "path": "newfile.js", "content": "console.log('hello');" },\n    { "action": "delete", "path": "oldfile.txt" }\n  ]\n}\n\`\`\``;
-    context += `\n\nYou can also make multiple changes in one response. Include the JSON block along with your explanation.`;
-    context += `\n\nRespond with helpful code, explanations, or suggestions.`;
+    context += `\n\nIMPORTANT INSTRUCTIONS FOR FILE OPERATIONS:`;
+    context += `\n1. When the user asks you to CREATE, MODIFY, UPDATE, or DELETE files, you MUST respond with a JSON block containing operations.`;
+    context += `\n2. Use the EXACT format below. Do NOT put the file content in regular text - put it ONLY in the JSON.`;
+    context += `\n3. For the current file, use the path "${fileName}" (without quotes).`;
+    context += `\n\nEXAMPLE RESPONSE FORMAT (include both explanation AND JSON):`;
+    context += `\n\`\`\`json
+{
+  "operations": [
+    {
+      "action": "update",
+      "path": "index.html",
+      "content": "<!DOCTYPE html>\\n<html>\\n<head>\\n    <title>My App</title>\\n</head>\\n<body>\\n    <h1>Hello World</h1>\\n</body>\\n</html>"
+    }
+  ]
+}
+\`\`\``;
+    context += `\n\nFor multiple files:
+\`\`\`json
+{
+  "operations": [
+    { "action": "update", "path": "index.html", "content": "..." },
+    { "action": "create", "path": "style.css", "content": "..." },
+    { "action": "delete", "path": "old.txt" }
+  ]
+}
+\`\`\``;
+    context += `\n\nFor updating the current file "${fileName}", use path: "${fileName}"`;
+    context += `\n\nRemember: ALWAYS include your explanation in text, THEN include the JSON block with the actual file changes.`;
+    context += `\n\nWhen writing HTML/CSS/JS code, include the complete file content.`;
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
         const finalModel = model || 'gemma4:latest';
 
+        // Check Ollama connection
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -241,12 +355,15 @@ app.callAI = async function (message) {
         const data = await response.json();
         let reply = data.response || "I couldn't generate a response. Please try again.";
 
+        // Clean up special tokens
         reply = reply.replace(/<\/?s>/g, '');
         reply = reply.replace(/<\|[^>]+\|>/g, '');
+        reply = reply.replace(/\[\/?INST\]/g, '');
 
         return reply;
     }
 
+    // Cloud provider calls...
     let url, body, headers;
     const effectiveKey = apiKey || '';
 
@@ -255,7 +372,7 @@ app.callAI = async function (message) {
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'system', content: 'You are a helpful coding assistant that has full access to the project files.' }, { role: 'user', content: context }],
+            messages: [{ role: 'system', content: 'You are a helpful coding assistant that can directly modify files. Always respond with JSON operations when the user asks to create or modify files.' }, { role: 'user', content: context }],
             temperature: 0.7,
             max_tokens: 8192
         });
@@ -391,4 +508,31 @@ app.updateProviderHelp = function () {
             hint.style.color = '#64748b';
         }
     }
+};
+
+// Manual apply function for when auto-apply is off
+app.applyLastAISuggestions = function () {
+    const messages = document.getElementById('chat-messages');
+    const lastMessage = messages.lastElementChild;
+
+    while (lastMessage && lastMessage.previousSibling) {
+        // Look for the last AI message with operations
+        if (lastMessage.classList && lastMessage.classList.contains('chat-bubble') &&
+            (lastMessage.classList.contains('ai') || lastMessage.classList.contains('system'))) {
+            const text = lastMessage.innerText;
+            const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
+            if (jsonMatch) {
+                try {
+                    const operations = JSON.parse(jsonMatch[1]);
+                    if (operations.operations) {
+                        const results = this.applyFileOperations(operations.operations);
+                        this.showToast(`Applied ${results.success.length} file operations`);
+                        return;
+                    }
+                } catch (e) { }
+            }
+        }
+        // Could add more sophisticated parsing here
+    }
+    this.showToast('No pending operations found');
 };
