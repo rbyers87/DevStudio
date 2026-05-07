@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider logic & chat (FIXED)
+// AI provider logic & chat (FIXED - Direct File Modification)
 // ============================================================
 
 app.saveAISettings = function () {
@@ -96,12 +96,8 @@ app.addChatMessage = function (text, sender) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = `chat-bubble ${sender}`;
-    // Preserve formatting and handle code blocks
+    // Format the text for display
     let formattedText = text.replace(/\n/g, '<br>');
-    // Highlight code blocks
-    formattedText = formattedText.replace(/```(\w+)?<br>([\s\S]*?)<br>```/g, (match, lang, code) => {
-        return `<div class="code-block"><pre><code>${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre></div>`;
-    });
     div.innerHTML = formattedText;
     container.appendChild(div);
     container.scrollTop = container.scrollHeight;
@@ -126,31 +122,34 @@ app.sendMessage = async function () {
     try {
         const response = await this.callAI(message);
 
-        // Check if response contains file operations
-        const operations = this.extractFileOperations(response);
+        // Parse the response for file operations
+        const operations = this.parseAIResponseForOperations(response);
 
         if (operations && operations.length > 0) {
             if (this.ai.autoApply) {
+                // Apply operations directly
                 const results = this.applyFileOperations(operations);
-                const summary = results.success.join('\n') + (results.failed.length ? '\n\nFailed:\n' + results.failed.join('\n') : '');
-                this.addChatMessage(`✅ Auto-applied file changes:\n${summary}`, 'system');
-                this.showToast(`Applied ${results.success.length} file operations`);
+                let summary = `**Applied ${results.success.length} changes:**\n`;
+                results.success.forEach(s => summary += `• ${s}\n`);
+                if (results.failed.length > 0) {
+                    summary += `\n**Failed:**\n`;
+                    results.failed.forEach(f => summary += `• ${f}\n`);
+                }
+                this.addChatMessage(summary, 'system');
+                this.showToast(`Applied ${results.success.length} file changes`);
 
-                // If there's also explanatory text, show it too
-                const cleanResponse = this.removeJsonBlock(response);
-                if (cleanResponse.trim()) {
-                    this.addChatMessage(cleanResponse, 'ai');
+                // Refresh the current file if it was changed
+                const affectedFile = operations.find(op => op.path === this.currentFile);
+                if (affectedFile && affectedFile.content) {
+                    this.openFile(this.currentFile);
                 }
             } else {
-                // Show the operations but don't apply automatically
+                // Show operations with apply button
                 this.addChatMessage(response, 'ai');
-                this.addChatMessage(`💡 **AI suggested file operations.** Enable "Auto-apply AI file changes" in Settings to apply automatically.\n\nTo apply now, click the "Apply Changes" button below.`, 'system');
-
-                // Add an "Apply Changes" button
-                this.addApplyButton(operations);
+                this.showApplyButton(operations);
             }
         } else {
-            // No operations, just show the response
+            // Just show the response
             this.addChatMessage(response, 'ai');
         }
     } catch (error) {
@@ -176,80 +175,176 @@ app.sendMessage = async function () {
     }
 };
 
-// Extract file operations from AI response
-app.extractFileOperations = function (response) {
+// Parse AI response to extract file operations
+app.parseAIResponseForOperations = function (response) {
     const operations = [];
 
     // Look for JSON blocks
-    const jsonPattern = /```json\s*([\s\S]*?)\s*```/g;
+    const jsonRegex = /```json\s*({[\s\S]*?})\s*```/g;
     let match;
 
-    while ((match = jsonPattern.exec(response)) !== null) {
+    while ((match = jsonRegex.exec(response)) !== null) {
         try {
-            const jsonData = JSON.parse(match[1]);
-            if (jsonData.operations && Array.isArray(jsonData.operations)) {
-                operations.push(...jsonData.operations);
-            }
-            // Also check for direct operations array
-            if (Array.isArray(jsonData) && jsonData.length > 0 && jsonData[0].action) {
-                operations.push(...jsonData);
+            const data = JSON.parse(match[1]);
+            if (data.operations && Array.isArray(data.operations)) {
+                operations.push(...data.operations);
+            } else if (data.action && data.path) {
+                operations.push(data);
             }
         } catch (e) {
-            console.log('Failed to parse JSON block:', e);
+            console.log('JSON parse failed:', e);
         }
     }
 
-    // Look for markdown code blocks that might contain file content
-    const codeBlockPattern = /```(\w+)\n([\s\S]*?)```/g;
-    let currentFilePath = null;
+    // Look for markdown code blocks that might be file content
+    const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
+    let codeMatch;
+    let fileCounter = 0;
 
-    // Also look for file creation patterns in text
-    const fileCreationPattern = /(?:create|update|modify)\s+(?:file\s+)?['"]?([\w\/\\]+\.\w+)['"]?\s*(?:with|to|as)?\s*:?\s*```/gi;
+    while ((codeMatch = codeBlockRegex.exec(response)) !== null) {
+        const language = codeMatch[1];
+        const content = codeMatch[2];
+
+        // Try to determine file path from context
+        const contextBefore = response.substring(0, codeMatch.index);
+        const pathMatch = contextBefore.match(/(?:file|create|update|modify)\s+['"]?([\w\/\\]+\.\w+)['"]?/i);
+
+        if (pathMatch) {
+            operations.push({
+                action: 'update',
+                path: pathMatch[1],
+                content: content
+            });
+        } else if (language === 'html' || language === 'css' || language === 'javascript' || language === 'js') {
+            // Suggest a filename based on language
+            let suggestedPath = '';
+            if (language === 'html') suggestedPath = 'newfile.html';
+            else if (language === 'css') suggestedPath = 'styles.css';
+            else if (language === 'javascript' || language === 'js') suggestedPath = 'script.js';
+            else suggestedPath = `file_${fileCounter++}.${language}`;
+
+            operations.push({
+                action: 'create',
+                path: suggestedPath,
+                content: content
+            });
+        }
+    }
 
     return operations;
 };
 
-// Remove JSON blocks from response for clean display
-app.removeJsonBlock = function (response) {
-    return response.replace(/```json\s*[\s\S]*?\s*```/g, '');
-};
-
-// Add apply button to chat
-app.addApplyButton = function (operations) {
+// Show apply button for operations
+app.showApplyButton = function (operations) {
     const container = document.getElementById('chat-messages');
     const buttonDiv = document.createElement('div');
     buttonDiv.className = 'chat-bubble system';
-    buttonDiv.style.padding = '8px';
+    buttonDiv.style.padding = '12px';
     buttonDiv.style.textAlign = 'center';
+    buttonDiv.style.background = '#1e293b';
+    buttonDiv.style.border = '1px solid #3b82f6';
+
+    // Show what will be applied
+    let opsList = '<div style="text-align: left; margin-bottom: 12px; font-size: 12px;"><strong>Ready to apply:</strong><br>';
+    operations.forEach(op => {
+        opsList += `• ${op.action}: ${op.path}<br>`;
+    });
+    opsList += '</div>';
 
     const applyBtn = document.createElement('button');
     applyBtn.className = 'btn btn-primary';
-    applyBtn.style.padding = '6px 16px';
-    applyBtn.style.fontSize = '12px';
-    applyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Apply Suggested Changes';
+    applyBtn.style.padding = '8px 20px';
+    applyBtn.style.fontSize = '13px';
+    applyBtn.style.marginRight = '8px';
+    applyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Apply Changes';
     applyBtn.onclick = () => {
         const results = this.applyFileOperations(operations);
-        const summary = results.success.join('\n') + (results.failed.length ? '\n\nFailed:\n' + results.failed.join('\n') : '');
-        this.addChatMessage(`✅ Applied file changes:\n${summary}`, 'system');
-        this.showToast(`Applied ${results.success.length} file operations`);
+        let summary = `Applied ${results.success.length} changes:\n`;
+        results.success.forEach(s => summary += `• ${s}\n`);
+        if (results.failed.length > 0) {
+            summary += `\nFailed:\n`;
+            results.failed.forEach(f => summary += `• ${f}\n`);
+        }
+        this.addChatMessage(summary, 'system');
+        this.showToast(`Applied ${results.success.length} file changes`);
         buttonDiv.remove();
+
+        // Refresh current file if needed
+        const affectedFile = operations.find(op => op.path === this.currentFile);
+        if (affectedFile && affectedFile.content) {
+            this.openFile(this.currentFile);
+        }
     };
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-secondary';
-    cancelBtn.style.padding = '6px 16px';
-    cancelBtn.style.fontSize = '12px';
-    cancelBtn.style.marginLeft = '8px';
-    cancelBtn.innerHTML = '<i class="fas fa-times"></i> Dismiss';
-    cancelBtn.onclick = () => buttonDiv.remove();
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'btn btn-secondary';
+    dismissBtn.style.padding = '8px 20px';
+    dismissBtn.style.fontSize = '13px';
+    dismissBtn.innerHTML = '<i class="fas fa-times"></i> Dismiss';
+    dismissBtn.onclick = () => buttonDiv.remove();
 
+    buttonDiv.innerHTML = opsList;
     buttonDiv.appendChild(applyBtn);
-    buttonDiv.appendChild(cancelBtn);
+    buttonDiv.appendChild(dismissBtn);
     container.appendChild(buttonDiv);
     container.scrollTop = container.scrollHeight;
 };
 
-// Enhanced callAI with better instructions for file operations
+// Direct file modification for common requests
+app.handleDirectCommands = function (message, currentFileContent, currentFilePath) {
+    const operations = [];
+    const lowerMsg = message.toLowerCase();
+
+    // Handle "create a new file" requests
+    const createMatch = message.match(/(?:create|make|add)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?['"]?([\w\/\\]+\.\w+)['"]?\s*(?:with\s+)?(?:content\s*)?[:\n]*(.*)/is);
+    if (createMatch) {
+        const filePath = createMatch[1];
+        let content = createMatch[2] || '';
+
+        // If content looks like code, extract it
+        const codeMatch = message.match(/```(\w*)\n([\s\S]*?)```/);
+        if (codeMatch) {
+            content = codeMatch[2];
+        }
+
+        if (filePath && content) {
+            operations.push({
+                action: 'create',
+                path: filePath,
+                content: content
+            });
+        }
+    }
+
+    // Handle "update current file" requests
+    if ((lowerMsg.includes('update') || lowerMsg.includes('change') || lowerMsg.includes('modify') || lowerMsg.includes('fix')) &&
+        currentFilePath && currentFilePath !== 'none') {
+
+        const codeMatch = message.match(/```(\w*)\n([\s\S]*?)```/);
+        if (codeMatch) {
+            operations.push({
+                action: 'update',
+                path: currentFilePath,
+                content: codeMatch[2]
+            });
+        } else if (lowerMsg.includes('add') && lowerMsg.includes('function')) {
+            // For adding functions, preserve existing content
+            const functionMatch = message.match(/function\s+(\w+)[\s\S]*?\{[\s\S]*?\}/);
+            if (functionMatch) {
+                const newContent = currentFileContent + '\n\n' + functionMatch[0];
+                operations.push({
+                    action: 'update',
+                    path: currentFilePath,
+                    content: newContent
+                });
+            }
+        }
+    }
+
+    return operations;
+};
+
+// Enhanced callAI with direct instruction for JSON output
 app.callAI = async function (message) {
     const { provider, apiKey, model, endpoint } = this.ai;
     const config = this.providers[provider];
@@ -258,42 +353,55 @@ app.callAI = async function (message) {
     const fileName = this.currentFile || 'none';
     const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
 
+    // Try direct command handling first
+    const directOps = this.handleDirectCommands(message, currentCode, this.currentFile);
+    if (directOps.length > 0) {
+        // Return a response that will trigger the operations
+        return JSON.stringify({ operations: directOps });
+    }
+
     const projectContext = this.getProjectContext();
 
-    let context = `You are DevStudio AI, an expert coding assistant. You have FULL access to all files in the project and can directly modify them.`;
-    context += `\n\n${projectContext}`;
-    context += `\n\nCurrent open file: ${fileName} (${fileExt} extension)`;
-    context += `\nCurrent code in open file:\n\`\`\`${fileExt}\n${currentCode || '(empty file)'}\n\`\`\``;
-    context += `\n\nUser request: ${message}`;
-    context += `\n\nIMPORTANT INSTRUCTIONS FOR FILE OPERATIONS:`;
-    context += `\n1. When the user asks you to CREATE, MODIFY, UPDATE, or DELETE files, you MUST respond with a JSON block containing operations.`;
-    context += `\n2. Use the EXACT format below. Do NOT put the file content in regular text - put it ONLY in the JSON.`;
-    context += `\n3. For the current file, use the path "${fileName}" (without quotes).`;
-    context += `\n\nEXAMPLE RESPONSE FORMAT (include both explanation AND JSON):`;
-    context += `\n\`\`\`json
+    // STRICT JSON OUTPUT INSTRUCTION
+    let context = `You are DevStudio AI. You MUST respond with ONLY a JSON object containing file operations. Do NOT add any explanatory text before or after the JSON.
+
+The JSON must follow this EXACT format:
 {
   "operations": [
     {
       "action": "update",
-      "path": "index.html",
-      "content": "<!DOCTYPE html>\\n<html>\\n<head>\\n    <title>My App</title>\\n</head>\\n<body>\\n    <h1>Hello World</h1>\\n</body>\\n</html>"
+      "path": "${fileName}",
+      "content": "THE COMPLETE FILE CONTENT HERE"
     }
   ]
 }
-\`\`\``;
-    context += `\n\nFor multiple files:
-\`\`\`json
+
+For multiple files:
 {
   "operations": [
-    { "action": "update", "path": "index.html", "content": "..." },
-    { "action": "create", "path": "style.css", "content": "..." },
-    { "action": "delete", "path": "old.txt" }
+    { "action": "create", "path": "newfile.html", "content": "<html>...</html>" },
+    { "action": "update", "path": "${fileName}", "content": "updated content" },
+    { "action": "delete", "path": "oldfile.txt" }
   ]
 }
-\`\`\``;
-    context += `\n\nFor updating the current file "${fileName}", use path: "${fileName}"`;
-    context += `\n\nRemember: ALWAYS include your explanation in text, THEN include the JSON block with the actual file changes.`;
-    context += `\n\nWhen writing HTML/CSS/JS code, include the complete file content.`;
+
+CRITICAL RULES:
+1. When updating ${fileName}, include the COMPLETE updated file content
+2. Escape double quotes inside content with backslash: \\"
+3. Use \\n for newlines inside strings
+4. Valid actions: "create", "update", "delete"
+5. If no file changes are needed, respond with: {"operations": []}
+
+Current project has these files:
+${projectContext}
+
+Current open file: ${fileName}
+Current content:
+${currentCode || '(empty)'}
+
+User request: ${message}
+
+Remember: Respond with ONLY the JSON object. No explanations. No markdown formatting around the JSON. Just the raw JSON.`;
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
@@ -339,7 +447,7 @@ app.callAI = async function (message) {
                 prompt: context,
                 stream: false,
                 options: {
-                    temperature: 0.7,
+                    temperature: 0.3,  // Lower temperature for more predictable JSON
                     num_predict: 8192,
                     top_p: 0.9,
                     repeat_penalty: 1.1
@@ -353,27 +461,49 @@ app.callAI = async function (message) {
         }
 
         const data = await response.json();
-        let reply = data.response || "I couldn't generate a response. Please try again.";
+        let reply = data.response || "{\"operations\":[]}";
 
         // Clean up special tokens
         reply = reply.replace(/<\/?s>/g, '');
         reply = reply.replace(/<\|[^>]+\|>/g, '');
         reply = reply.replace(/\[\/?INST\]/g, '');
 
-        return reply;
+        // Try to extract JSON if there's extra text
+        const jsonMatch = reply.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            reply = jsonMatch[0];
+        }
+
+        // Validate JSON
+        try {
+            JSON.parse(reply);
+            return reply;
+        } catch (e) {
+            console.error('Invalid JSON response:', reply);
+            // Return a friendly error
+            return JSON.stringify({
+                operations: [],
+                error: "AI didn't return valid JSON. Please try again with a clearer request."
+            });
+        }
     }
 
-    // Cloud provider calls...
+    // Cloud providers - similar strict JSON instruction
     let url, body, headers;
     const effectiveKey = apiKey || '';
+
+    const systemPrompt = `You are DevStudio AI. You MUST respond with ONLY a JSON object containing file operations. No extra text. Format: {"operations":[{"action":"update","path":"filename","content":"content"}]}`;
 
     if (provider === 'openai') {
         url = config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'system', content: 'You are a helpful coding assistant that can directly modify files. Always respond with JSON operations when the user asks to create or modify files.' }, { role: 'user', content: context }],
-            temperature: 0.7,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: context }
+            ],
+            temperature: 0.3,
             max_tokens: 8192
         });
     } else if (provider === 'anthropic') {
@@ -382,23 +512,25 @@ app.callAI = async function (message) {
         body = JSON.stringify({
             model: model || config.defaultModel,
             max_tokens: 8192,
-            messages: [{ role: 'user', content: context }]
+            temperature: 0.3,
+            messages: [{ role: 'user', content: context }],
+            system: systemPrompt
         });
     } else if (provider === 'google') {
         const useModel = model || config.defaultModel;
         url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${effectiveKey}`;
         headers = { 'Content-Type': 'application/json' };
         body = JSON.stringify({
-            contents: [{ parts: [{ text: context }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+            contents: [{ parts: [{ text: systemPrompt + '\n\n' + context }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 8192 }
         });
     } else {
         url = endpoint || config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'user', content: context }],
-            temperature: 0.7
+            messages: [{ role: 'user', content: systemPrompt + '\n\n' + context }],
+            temperature: 0.3
         });
     }
 
@@ -410,22 +542,49 @@ app.callAI = async function (message) {
     }
 
     const data = await response.json();
+    let reply = '';
 
-    if (provider === 'anthropic') return data.content[0].text;
-    if (provider === 'google') return data.candidates[0].content.parts[0].text;
-    return data.choices[0].message.content;
+    if (provider === 'anthropic') reply = data.content[0].text;
+    else if (provider === 'google') reply = data.candidates[0].content.parts[0].text;
+    else reply = data.choices[0].message.content;
+
+    // Extract JSON
+    const jsonMatch = reply.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        reply = jsonMatch[0];
+    }
+
+    try {
+        JSON.parse(reply);
+        return reply;
+    } catch (e) {
+        return JSON.stringify({ operations: [] });
+    }
 };
 
 app.quickAction = function (action) {
-    const actions = {
-        explain: 'Explain the current file in detail, including what each part does and any potential improvements.',
-        fix: 'Find and fix bugs or issues in the current file. Provide the corrected version.',
-        optimize: 'Optimize the current file for better performance, readability, and maintainability.',
-        document: 'Add comprehensive documentation and comments to the current file.',
-        test: 'Write unit tests for the current file using appropriate testing framework.'
-    };
     const chatInput = document.getElementById('chat-input');
-    if (chatInput) chatInput.value = actions[action];
+    if (!chatInput) return;
+
+    switch (action) {
+        case 'explain':
+            chatInput.value = `Explain the current file (${this.currentFile || 'no file open'}) in detail`;
+            break;
+        case 'fix':
+            chatInput.value = `Fix any bugs in the current file and show me the corrected version`;
+            break;
+        case 'optimize':
+            chatInput.value = `Optimize the current file for better performance and readability`;
+            break;
+        case 'document':
+            chatInput.value = `Add comprehensive documentation comments to the current file`;
+            break;
+        case 'test':
+            chatInput.value = `Write unit tests for the current file`;
+            break;
+        default:
+            chatInput.value = action;
+    }
     this.sendMessage();
 };
 
@@ -508,31 +667,4 @@ app.updateProviderHelp = function () {
             hint.style.color = '#64748b';
         }
     }
-};
-
-// Manual apply function for when auto-apply is off
-app.applyLastAISuggestions = function () {
-    const messages = document.getElementById('chat-messages');
-    const lastMessage = messages.lastElementChild;
-
-    while (lastMessage && lastMessage.previousSibling) {
-        // Look for the last AI message with operations
-        if (lastMessage.classList && lastMessage.classList.contains('chat-bubble') &&
-            (lastMessage.classList.contains('ai') || lastMessage.classList.contains('system'))) {
-            const text = lastMessage.innerText;
-            const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-            if (jsonMatch) {
-                try {
-                    const operations = JSON.parse(jsonMatch[1]);
-                    if (operations.operations) {
-                        const results = this.applyFileOperations(operations.operations);
-                        this.showToast(`Applied ${results.success.length} file operations`);
-                        return;
-                    }
-                } catch (e) { }
-            }
-        }
-        // Could add more sophisticated parsing here
-    }
-    this.showToast('No pending operations found');
 };
