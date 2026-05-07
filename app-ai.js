@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider logic & chat (FIXED - Handles multiple JSON formats)
+// AI provider logic & chat (COMPLETE + DEBUG)
 // ============================================================
 
 app.saveAISettings = function () {
@@ -121,12 +121,18 @@ app.sendMessage = async function () {
     try {
         const response = await this.callAI(message);
 
-        // Parse the response for file operations (handles multiple formats)
+        // DEBUG: Log the raw response to console
+        console.log('===== AI RAW RESPONSE =====');
+        console.log(response);
+        console.log('===========================');
+
+        // Parse the response for file operations
         const operations = this.parseAIResponseForOperations(response);
+
+        console.log('Parsed operations:', operations);
 
         if (operations && operations.length > 0) {
             if (this.ai.autoApply) {
-                // Apply operations directly
                 const results = this.applyFileOperations(operations);
                 let summary = `**Applied ${results.success.length} changes:**\n`;
                 results.success.forEach(s => summary += `• ${s}\n`);
@@ -137,24 +143,19 @@ app.sendMessage = async function () {
                 this.addChatMessage(summary, 'system');
                 this.showToast(`Applied ${results.success.length} file changes`);
 
-                // Refresh the current file if it was changed
                 const affectedFile = operations.find(op => op.path === this.currentFile);
                 if (affectedFile && affectedFile.content) {
                     this.openFile(this.currentFile);
                 }
-
-                // Refresh file tree to show new files
                 this.renderFileTree();
                 this.updateFolderSelector();
             } else {
-                // Show operations with apply button
                 this.addChatMessage(response, 'ai');
                 this.showApplyButton(operations);
             }
         } else {
             // Just show the response
             let cleanResponse = response;
-            // Remove any JSON blocks from display
             cleanResponse = cleanResponse.replace(/```json\s*[\s\S]*?\s*```/g, '');
             cleanResponse = cleanResponse.replace(/\{\s*"(?:file|content|operations|action|path)"[\s\S]*?\}/g, '');
             if (cleanResponse.trim()) {
@@ -193,25 +194,28 @@ app.parseAIResponseForOperations = function (response) {
     // Try to find any JSON object in the response
     const jsonMatches = response.match(/\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}/g);
 
+    console.log('JSON matches found:', jsonMatches);
+
     if (jsonMatches) {
         for (const jsonStr of jsonMatches) {
             try {
                 const data = JSON.parse(jsonStr);
+                console.log('Parsed JSON data:', data);
 
-                // Format 1: {"operations": [{"action": "...", "path": "...", "content": "..."}]}
-                if (data.operations && Array.isArray(data.operations)) {
-                    operations.push(...data.operations);
-                }
-                // Format 2: {"file": "path.html", "content": "..."}
-                else if (data.file && data.content) {
+                // Format 1: {"file": "path.html", "content": "..."}
+                if (data.file && data.content !== undefined) {
                     operations.push({
                         action: 'create',
                         path: data.file,
                         content: data.content
                     });
                 }
+                // Format 2: {"operations": [{"action": "...", "path": "...", "content": "..."}]}
+                else if (data.operations && Array.isArray(data.operations)) {
+                    operations.push(...data.operations);
+                }
                 // Format 3: {"path": "path.html", "content": "...", "action": "..."}
-                else if (data.path && data.content) {
+                else if (data.path && data.content !== undefined) {
                     operations.push({
                         action: data.action || 'update',
                         path: data.path,
@@ -227,7 +231,7 @@ app.parseAIResponseForOperations = function (response) {
                     });
                 }
                 // Format 5: {"name": "path.html", "content": "..."}
-                else if (data.name && data.content) {
+                else if (data.name && data.content !== undefined) {
                     operations.push({
                         action: 'create',
                         path: data.name,
@@ -237,7 +241,7 @@ app.parseAIResponseForOperations = function (response) {
                 // Format 6: Direct array of operations
                 else if (Array.isArray(data)) {
                     for (const item of data) {
-                        if (item.path && (item.content || item.action === 'delete')) {
+                        if (item.path && (item.content !== undefined || item.action === 'delete')) {
                             operations.push({
                                 action: item.action || 'update',
                                 path: item.path,
@@ -247,7 +251,7 @@ app.parseAIResponseForOperations = function (response) {
                     }
                 }
             } catch (e) {
-                // Not valid JSON, continue
+                console.log('JSON parse error:', e);
             }
         }
     }
@@ -309,7 +313,6 @@ app.showApplyButton = function (operations) {
     buttonDiv.style.background = '#1e293b';
     buttonDiv.style.border = '1px solid #3b82f6';
 
-    // Show what will be applied
     let opsList = '<div style="text-align: left; margin-bottom: 12px; font-size: 12px;"><strong>📁 Ready to apply:</strong><br>';
     operations.forEach(op => {
         const actionIcon = op.action === 'delete' ? '🗑️' : (op.action === 'create' ? '✨' : '📝');
@@ -334,12 +337,6 @@ app.showApplyButton = function (operations) {
         this.addChatMessage(summary, 'system');
         this.showToast(`Applied ${results.success.length} file changes`);
         buttonDiv.remove();
-
-        // Refresh current file if needed
-        const affectedFile = operations.find(op => op.path === this.currentFile);
-        if (affectedFile && affectedFile.content) {
-            this.openFile(this.currentFile);
-        }
         this.renderFileTree();
         this.updateFolderSelector();
     };
@@ -358,44 +355,45 @@ app.showApplyButton = function (operations) {
     container.scrollTop = container.scrollHeight;
 };
 
-// Enhanced callAI with simple instruction
 app.callAI = async function (message) {
     const { provider, apiKey, model, endpoint } = this.ai;
     const config = this.providers[provider];
 
     const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
     const fileName = this.currentFile || 'none';
+    const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
 
     const projectContext = this.getProjectContext();
 
-    // Simple, clear instruction
-    const context = `You are a code editor AI. When the user asks you to create or modify a file, respond with ONLY a JSON object.
+    let context = `You are DevStudio AI, an expert coding assistant. You have FULL access to all files in the project and can directly modify them.
 
-EXAMPLE RESPONSE for creating a file:
-{"file": "test.html", "content": "<!DOCTYPE html><html><body><h1>Hello</h1></body></html>"}
-
-EXAMPLE RESPONSE for updating current file:
-{"file": "${fileName}", "content": "the complete updated content"}
-
-EXAMPLE RESPONSE for multiple files:
-{"operations": [{"action": "create", "path": "index.html", "content": "..."}, {"action": "update", "path": "style.css", "content": "..."}]}
-
-Current files in project:
 ${projectContext}
 
-Current open file: ${fileName}
-Current content:
-${currentCode || '(empty)'}
+Current open file: ${fileName} (${fileExt} extension)
+Current code in open file:
+\`\`\`${fileExt}
+${currentCode || '(empty file)'}
+\`\`\`
 
 User request: ${message}
 
-IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
+IMPORTANT: When the user asks you to CREATE, MODIFY, UPDATE, or DELETE files, respond with a JSON object.
+
+EXAMPLE for creating a file:
+{"file": "test.html", "content": "<!DOCTYPE html><html><body><h1>Hello</h1></body></html>"}
+
+EXAMPLE for updating current file:
+{"file": "${fileName}", "content": "complete updated file content here"}
+
+EXAMPLE for multiple files:
+{"operations": [{"action": "create", "path": "index.html", "content": "..."}, {"action": "update", "path": "style.css", "content": "..."}]}
+
+Respond with ONLY the JSON object. No extra text before or after.`;
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
         const finalModel = model || 'gemma4:latest';
 
-        // Check Ollama connection
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -435,9 +433,10 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
                 prompt: context,
                 stream: false,
                 options: {
-                    temperature: 0.2,
+                    temperature: 0.3,
                     num_predict: 4096,
-                    top_p: 0.9
+                    top_p: 0.9,
+                    repeat_penalty: 1.1
                 }
             })
         });
@@ -450,15 +449,19 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
         const data = await response.json();
         let reply = data.response || "{}";
 
-        // Clean up
         reply = reply.replace(/<\/?s>/g, '');
         reply = reply.replace(/<\|[^>]+\|>/g, '');
         reply = reply.replace(/\[\/?INST\]/g, '');
 
+        const jsonMatch = reply.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            reply = jsonMatch[0];
+        }
+
         return reply;
     }
 
-    // Cloud providers - simplified
+    // Cloud providers
     let url, body, headers;
     const effectiveKey = apiKey || '';
 
@@ -468,7 +471,7 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
         body = JSON.stringify({
             model: model || config.defaultModel,
             messages: [{ role: 'user', content: context }],
-            temperature: 0.2,
+            temperature: 0.3,
             max_tokens: 4096
         });
     } else if (provider === 'anthropic') {
@@ -477,7 +480,7 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
         body = JSON.stringify({
             model: model || config.defaultModel,
             max_tokens: 4096,
-            temperature: 0.2,
+            temperature: 0.3,
             messages: [{ role: 'user', content: context }]
         });
     } else if (provider === 'google') {
@@ -486,7 +489,7 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
         headers = { 'Content-Type': 'application/json' };
         body = JSON.stringify({
             contents: [{ parts: [{ text: context }] }],
-            generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
+            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 }
         });
     } else {
         url = endpoint || config.baseUrl;
@@ -494,7 +497,7 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
         body = JSON.stringify({
             model: model || config.defaultModel,
             messages: [{ role: 'user', content: context }],
-            temperature: 0.2
+            temperature: 0.3
         });
     }
 
@@ -511,6 +514,11 @@ IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
     if (provider === 'anthropic') reply = data.content[0].text;
     else if (provider === 'google') reply = data.candidates[0].content.parts[0].text;
     else reply = data.choices[0].message.content;
+
+    const jsonMatch = reply.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        reply = jsonMatch[0];
+    }
 
     return reply;
 };
