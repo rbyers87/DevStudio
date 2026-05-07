@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider logic & chat (FIXED - Direct File Modification)
+// AI provider logic & chat (FIXED - Handles multiple JSON formats)
 // ============================================================
 
 app.saveAISettings = function () {
@@ -96,7 +96,6 @@ app.addChatMessage = function (text, sender) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = `chat-bubble ${sender}`;
-    // Format the text for display
     let formattedText = text.replace(/\n/g, '<br>');
     div.innerHTML = formattedText;
     container.appendChild(div);
@@ -122,7 +121,7 @@ app.sendMessage = async function () {
     try {
         const response = await this.callAI(message);
 
-        // Parse the response for file operations
+        // Parse the response for file operations (handles multiple formats)
         const operations = this.parseAIResponseForOperations(response);
 
         if (operations && operations.length > 0) {
@@ -143,6 +142,10 @@ app.sendMessage = async function () {
                 if (affectedFile && affectedFile.content) {
                     this.openFile(this.currentFile);
                 }
+
+                // Refresh file tree to show new files
+                this.renderFileTree();
+                this.updateFolderSelector();
             } else {
                 // Show operations with apply button
                 this.addChatMessage(response, 'ai');
@@ -150,7 +153,15 @@ app.sendMessage = async function () {
             }
         } else {
             // Just show the response
-            this.addChatMessage(response, 'ai');
+            let cleanResponse = response;
+            // Remove any JSON blocks from display
+            cleanResponse = cleanResponse.replace(/```json\s*[\s\S]*?\s*```/g, '');
+            cleanResponse = cleanResponse.replace(/\{\s*"(?:file|content|operations|action|path)"[\s\S]*?\}/g, '');
+            if (cleanResponse.trim()) {
+                this.addChatMessage(cleanResponse || "Response received (no file changes detected).", 'ai');
+            } else {
+                this.addChatMessage("No file changes were made. Please be more specific about what you want to create or modify.", 'ai');
+            }
         }
     } catch (error) {
         console.error('AI Error:', error);
@@ -175,59 +186,113 @@ app.sendMessage = async function () {
     }
 };
 
-// Parse AI response to extract file operations
+// Parse AI response to extract file operations - Supports multiple JSON formats
 app.parseAIResponseForOperations = function (response) {
     const operations = [];
 
-    // Look for JSON blocks
-    const jsonRegex = /```json\s*({[\s\S]*?})\s*```/g;
-    let match;
+    // Try to find any JSON object in the response
+    const jsonMatches = response.match(/\{(?:[^{}]|(?:\{(?:[^{}]|(?:\{[^{}]*\}))*\}))*\}/g);
 
-    while ((match = jsonRegex.exec(response)) !== null) {
-        try {
-            const data = JSON.parse(match[1]);
-            if (data.operations && Array.isArray(data.operations)) {
-                operations.push(...data.operations);
-            } else if (data.action && data.path) {
-                operations.push(data);
+    if (jsonMatches) {
+        for (const jsonStr of jsonMatches) {
+            try {
+                const data = JSON.parse(jsonStr);
+
+                // Format 1: {"operations": [{"action": "...", "path": "...", "content": "..."}]}
+                if (data.operations && Array.isArray(data.operations)) {
+                    operations.push(...data.operations);
+                }
+                // Format 2: {"file": "path.html", "content": "..."}
+                else if (data.file && data.content) {
+                    operations.push({
+                        action: 'create',
+                        path: data.file,
+                        content: data.content
+                    });
+                }
+                // Format 3: {"path": "path.html", "content": "...", "action": "..."}
+                else if (data.path && data.content) {
+                    operations.push({
+                        action: data.action || 'update',
+                        path: data.path,
+                        content: data.content
+                    });
+                }
+                // Format 4: {"filename": "path.html", "code": "..."}
+                else if (data.filename && data.code) {
+                    operations.push({
+                        action: 'create',
+                        path: data.filename,
+                        content: data.code
+                    });
+                }
+                // Format 5: {"name": "path.html", "content": "..."}
+                else if (data.name && data.content) {
+                    operations.push({
+                        action: 'create',
+                        path: data.name,
+                        content: data.content
+                    });
+                }
+                // Format 6: Direct array of operations
+                else if (Array.isArray(data)) {
+                    for (const item of data) {
+                        if (item.path && (item.content || item.action === 'delete')) {
+                            operations.push({
+                                action: item.action || 'update',
+                                path: item.path,
+                                content: item.content || ''
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                // Not valid JSON, continue
             }
-        } catch (e) {
-            console.log('JSON parse failed:', e);
         }
     }
 
-    // Look for markdown code blocks that might be file content
-    const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
-    let codeMatch;
-    let fileCounter = 0;
+    // Also look for markdown code blocks as fallback
+    if (operations.length === 0) {
+        const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
+        let match;
+        let suggestedFile = null;
 
-    while ((codeMatch = codeBlockRegex.exec(response)) !== null) {
-        const language = codeMatch[1];
-        const content = codeMatch[2];
+        // Try to find filename before the code block
+        const fileMatch = response.match(/(?:file|create|update)\s+['"]?([\w\/\\]+\.\w+)['"]?/i);
+        if (fileMatch) {
+            suggestedFile = fileMatch[1];
+        }
 
-        // Try to determine file path from context
-        const contextBefore = response.substring(0, codeMatch.index);
-        const pathMatch = contextBefore.match(/(?:file|create|update|modify)\s+['"]?([\w\/\\]+\.\w+)['"]?/i);
+        while ((match = codeBlockRegex.exec(response)) !== null) {
+            const language = match[1];
+            const content = match[2];
 
-        if (pathMatch) {
-            operations.push({
-                action: 'update',
-                path: pathMatch[1],
-                content: content
-            });
-        } else if (language === 'html' || language === 'css' || language === 'javascript' || language === 'js') {
-            // Suggest a filename based on language
-            let suggestedPath = '';
-            if (language === 'html') suggestedPath = 'newfile.html';
-            else if (language === 'css') suggestedPath = 'styles.css';
-            else if (language === 'javascript' || language === 'js') suggestedPath = 'script.js';
-            else suggestedPath = `file_${fileCounter++}.${language}`;
-
-            operations.push({
-                action: 'create',
-                path: suggestedPath,
-                content: content
-            });
+            if (suggestedFile) {
+                operations.push({
+                    action: 'update',
+                    path: suggestedFile,
+                    content: content
+                });
+            } else if (language === 'html') {
+                operations.push({
+                    action: 'create',
+                    path: 'index.html',
+                    content: content
+                });
+            } else if (language === 'css') {
+                operations.push({
+                    action: 'create',
+                    path: 'style.css',
+                    content: content
+                });
+            } else if (language === 'javascript' || language === 'js') {
+                operations.push({
+                    action: 'create',
+                    path: 'script.js',
+                    content: content
+                });
+            }
         }
     }
 
@@ -245,9 +310,10 @@ app.showApplyButton = function (operations) {
     buttonDiv.style.border = '1px solid #3b82f6';
 
     // Show what will be applied
-    let opsList = '<div style="text-align: left; margin-bottom: 12px; font-size: 12px;"><strong>Ready to apply:</strong><br>';
+    let opsList = '<div style="text-align: left; margin-bottom: 12px; font-size: 12px;"><strong>📁 Ready to apply:</strong><br>';
     operations.forEach(op => {
-        opsList += `• ${op.action}: ${op.path}<br>`;
+        const actionIcon = op.action === 'delete' ? '🗑️' : (op.action === 'create' ? '✨' : '📝');
+        opsList += `• ${actionIcon} ${op.action}: <code>${op.path}</code><br>`;
     });
     opsList += '</div>';
 
@@ -259,10 +325,10 @@ app.showApplyButton = function (operations) {
     applyBtn.innerHTML = '<i class="fas fa-check-circle"></i> Apply Changes';
     applyBtn.onclick = () => {
         const results = this.applyFileOperations(operations);
-        let summary = `Applied ${results.success.length} changes:\n`;
+        let summary = `✅ Applied ${results.success.length} changes:\n`;
         results.success.forEach(s => summary += `• ${s}\n`);
         if (results.failed.length > 0) {
-            summary += `\nFailed:\n`;
+            summary += `\n❌ Failed:\n`;
             results.failed.forEach(f => summary += `• ${f}\n`);
         }
         this.addChatMessage(summary, 'system');
@@ -274,6 +340,8 @@ app.showApplyButton = function (operations) {
         if (affectedFile && affectedFile.content) {
             this.openFile(this.currentFile);
         }
+        this.renderFileTree();
+        this.updateFolderSelector();
     };
 
     const dismissBtn = document.createElement('button');
@@ -290,109 +358,29 @@ app.showApplyButton = function (operations) {
     container.scrollTop = container.scrollHeight;
 };
 
-// Direct file modification for common requests
-app.handleDirectCommands = function (message, currentFileContent, currentFilePath) {
-    const operations = [];
-    const lowerMsg = message.toLowerCase();
-
-    // Handle "create a new file" requests
-    const createMatch = message.match(/(?:create|make|add)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?['"]?([\w\/\\]+\.\w+)['"]?\s*(?:with\s+)?(?:content\s*)?[:\n]*(.*)/is);
-    if (createMatch) {
-        const filePath = createMatch[1];
-        let content = createMatch[2] || '';
-
-        // If content looks like code, extract it
-        const codeMatch = message.match(/```(\w*)\n([\s\S]*?)```/);
-        if (codeMatch) {
-            content = codeMatch[2];
-        }
-
-        if (filePath && content) {
-            operations.push({
-                action: 'create',
-                path: filePath,
-                content: content
-            });
-        }
-    }
-
-    // Handle "update current file" requests
-    if ((lowerMsg.includes('update') || lowerMsg.includes('change') || lowerMsg.includes('modify') || lowerMsg.includes('fix')) &&
-        currentFilePath && currentFilePath !== 'none') {
-
-        const codeMatch = message.match(/```(\w*)\n([\s\S]*?)```/);
-        if (codeMatch) {
-            operations.push({
-                action: 'update',
-                path: currentFilePath,
-                content: codeMatch[2]
-            });
-        } else if (lowerMsg.includes('add') && lowerMsg.includes('function')) {
-            // For adding functions, preserve existing content
-            const functionMatch = message.match(/function\s+(\w+)[\s\S]*?\{[\s\S]*?\}/);
-            if (functionMatch) {
-                const newContent = currentFileContent + '\n\n' + functionMatch[0];
-                operations.push({
-                    action: 'update',
-                    path: currentFilePath,
-                    content: newContent
-                });
-            }
-        }
-    }
-
-    return operations;
-};
-
-// Enhanced callAI with direct instruction for JSON output
+// Enhanced callAI with simple instruction
 app.callAI = async function (message) {
     const { provider, apiKey, model, endpoint } = this.ai;
     const config = this.providers[provider];
 
     const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
     const fileName = this.currentFile || 'none';
-    const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
-
-    // Try direct command handling first
-    const directOps = this.handleDirectCommands(message, currentCode, this.currentFile);
-    if (directOps.length > 0) {
-        // Return a response that will trigger the operations
-        return JSON.stringify({ operations: directOps });
-    }
 
     const projectContext = this.getProjectContext();
 
-    // STRICT JSON OUTPUT INSTRUCTION
-    let context = `You are DevStudio AI. You MUST respond with ONLY a JSON object containing file operations. Do NOT add any explanatory text before or after the JSON.
+    // Simple, clear instruction
+    const context = `You are a code editor AI. When the user asks you to create or modify a file, respond with ONLY a JSON object.
 
-The JSON must follow this EXACT format:
-{
-  "operations": [
-    {
-      "action": "update",
-      "path": "${fileName}",
-      "content": "THE COMPLETE FILE CONTENT HERE"
-    }
-  ]
-}
+EXAMPLE RESPONSE for creating a file:
+{"file": "test.html", "content": "<!DOCTYPE html><html><body><h1>Hello</h1></body></html>"}
 
-For multiple files:
-{
-  "operations": [
-    { "action": "create", "path": "newfile.html", "content": "<html>...</html>" },
-    { "action": "update", "path": "${fileName}", "content": "updated content" },
-    { "action": "delete", "path": "oldfile.txt" }
-  ]
-}
+EXAMPLE RESPONSE for updating current file:
+{"file": "${fileName}", "content": "the complete updated content"}
 
-CRITICAL RULES:
-1. When updating ${fileName}, include the COMPLETE updated file content
-2. Escape double quotes inside content with backslash: \\"
-3. Use \\n for newlines inside strings
-4. Valid actions: "create", "update", "delete"
-5. If no file changes are needed, respond with: {"operations": []}
+EXAMPLE RESPONSE for multiple files:
+{"operations": [{"action": "create", "path": "index.html", "content": "..."}, {"action": "update", "path": "style.css", "content": "..."}]}
 
-Current project has these files:
+Current files in project:
 ${projectContext}
 
 Current open file: ${fileName}
@@ -401,7 +389,7 @@ ${currentCode || '(empty)'}
 
 User request: ${message}
 
-Remember: Respond with ONLY the JSON object. No explanations. No markdown formatting around the JSON. Just the raw JSON.`;
+IMPORTANT: Respond with ONLY the JSON. No extra text before or after.`;
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
@@ -447,10 +435,9 @@ Remember: Respond with ONLY the JSON object. No explanations. No markdown format
                 prompt: context,
                 stream: false,
                 options: {
-                    temperature: 0.3,  // Lower temperature for more predictable JSON
-                    num_predict: 8192,
-                    top_p: 0.9,
-                    repeat_penalty: 1.1
+                    temperature: 0.2,
+                    num_predict: 4096,
+                    top_p: 0.9
                 }
             })
         });
@@ -461,76 +448,53 @@ Remember: Respond with ONLY the JSON object. No explanations. No markdown format
         }
 
         const data = await response.json();
-        let reply = data.response || "{\"operations\":[]}";
+        let reply = data.response || "{}";
 
-        // Clean up special tokens
+        // Clean up
         reply = reply.replace(/<\/?s>/g, '');
         reply = reply.replace(/<\|[^>]+\|>/g, '');
         reply = reply.replace(/\[\/?INST\]/g, '');
 
-        // Try to extract JSON if there's extra text
-        const jsonMatch = reply.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            reply = jsonMatch[0];
-        }
-
-        // Validate JSON
-        try {
-            JSON.parse(reply);
-            return reply;
-        } catch (e) {
-            console.error('Invalid JSON response:', reply);
-            // Return a friendly error
-            return JSON.stringify({
-                operations: [],
-                error: "AI didn't return valid JSON. Please try again with a clearer request."
-            });
-        }
+        return reply;
     }
 
-    // Cloud providers - similar strict JSON instruction
+    // Cloud providers - simplified
     let url, body, headers;
     const effectiveKey = apiKey || '';
-
-    const systemPrompt = `You are DevStudio AI. You MUST respond with ONLY a JSON object containing file operations. No extra text. Format: {"operations":[{"action":"update","path":"filename","content":"content"}]}`;
 
     if (provider === 'openai') {
         url = config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: context }
-            ],
-            temperature: 0.3,
-            max_tokens: 8192
+            messages: [{ role: 'user', content: context }],
+            temperature: 0.2,
+            max_tokens: 4096
         });
     } else if (provider === 'anthropic') {
         url = config.baseUrl;
         headers = { 'x-api-key': effectiveKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            max_tokens: 8192,
-            temperature: 0.3,
-            messages: [{ role: 'user', content: context }],
-            system: systemPrompt
+            max_tokens: 4096,
+            temperature: 0.2,
+            messages: [{ role: 'user', content: context }]
         });
     } else if (provider === 'google') {
         const useModel = model || config.defaultModel;
         url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${effectiveKey}`;
         headers = { 'Content-Type': 'application/json' };
         body = JSON.stringify({
-            contents: [{ parts: [{ text: systemPrompt + '\n\n' + context }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 8192 }
+            contents: [{ parts: [{ text: context }] }],
+            generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }
         });
     } else {
         url = endpoint || config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'user', content: systemPrompt + '\n\n' + context }],
-            temperature: 0.3
+            messages: [{ role: 'user', content: context }],
+            temperature: 0.2
         });
     }
 
@@ -548,18 +512,7 @@ Remember: Respond with ONLY the JSON object. No explanations. No markdown format
     else if (provider === 'google') reply = data.candidates[0].content.parts[0].text;
     else reply = data.choices[0].message.content;
 
-    // Extract JSON
-    const jsonMatch = reply.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-        reply = jsonMatch[0];
-    }
-
-    try {
-        JSON.parse(reply);
-        return reply;
-    } catch (e) {
-        return JSON.stringify({ operations: [] });
-    }
+    return reply;
 };
 
 app.quickAction = function (action) {
