@@ -164,12 +164,14 @@ const app = {
             if (this.editor) {
                 setTimeout(() => this.editor.layout(), 50);
             }
+            this.refreshLayout();
         });
 
         const observer = new ResizeObserver(() => {
             if (this.editor) {
                 setTimeout(() => this.editor.layout(), 50);
             }
+            this.refreshLayout();
         });
 
         const editorSection = document.querySelector('.editor-section');
@@ -179,6 +181,41 @@ const app = {
         if (editorSection) observer.observe(editorSection);
         if (sidebarContainer) observer.observe(sidebarContainer);
         if (previewContainer) observer.observe(previewContainer);
+    },
+
+    // FIX: Layout refresh method to keep chat visible
+    refreshLayout() {
+        // Force Monaco editor to recalculate its layout
+        if (this.editor && !this.useFallbackEditor) {
+            setTimeout(() => {
+                try {
+                    this.editor.layout();
+                } catch (e) {
+                    console.log('Editor layout error:', e);
+                }
+            }, 50);
+        }
+
+        // Ensure chat panel is visible and properly positioned
+        const chatPanel = document.getElementById('chat-panel');
+        if (chatPanel && this.chatCollapsed === false) {
+            const currentHeight = parseInt(chatPanel.style.height);
+            if (currentHeight < 120) {
+                chatPanel.style.height = (this.chatHeight || 280) + 'px';
+            }
+        }
+
+        // Fix editor container height
+        const editorContainer = document.querySelector('.editor-container');
+        const editorSection = document.querySelector('.editor-section');
+        if (editorContainer && editorSection) {
+            const chatHeight = chatPanel ? chatPanel.offsetHeight : 280;
+            const tabsHeight = 38;
+            const availableHeight = editorSection.clientHeight - tabsHeight - chatHeight;
+            if (availableHeight > 100) {
+                editorContainer.style.flex = `${availableHeight}px 1 auto`;
+            }
+        }
     },
 
     setupColumnResizers() {
@@ -218,6 +255,7 @@ const app = {
                 }
                 setTimeout(() => {
                     if (this.editor) this.editor.layout();
+                    this.refreshLayout();
                 }, 10);
             }
             if (isResizingPreview) {
@@ -228,6 +266,7 @@ const app = {
                 }
                 setTimeout(() => {
                     if (this.editor) this.editor.layout();
+                    this.refreshLayout();
                 }, 10);
             }
         });
@@ -239,6 +278,7 @@ const app = {
                 document.body.classList.remove('resizing');
                 setTimeout(() => {
                     if (this.editor) this.editor.layout();
+                    this.refreshLayout();
                 }, 10);
             }
         });
@@ -267,12 +307,14 @@ const app = {
                 this.chatHeight = newHeight;
                 setTimeout(() => {
                     if (this.editor) this.editor.layout();
+                    this.refreshLayout();
                 }, 10);
             });
 
             document.addEventListener('mouseup', () => {
                 isResizing = false;
                 document.body.style.cursor = '';
+                this.refreshLayout();
             });
         }
     },
@@ -640,6 +682,7 @@ export function Header() {
             }
         }
 
+        this.refreshLayout();
         return results;
     }
 };

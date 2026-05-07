@@ -54,11 +54,13 @@ app.changeFolder = function (folder) {
     this.currentFolder = folder;
     this.saveToStorage();
     this.renderFileTree();
+    this.refreshLayout();
 };
 
 app.refreshFileTree = function () {
     this.renderFileTree();
     this.updateFolderSelector();
+    this.refreshLayout();
 };
 
 app.renderFileTree = function () {
@@ -171,6 +173,8 @@ app.renderFileTree = function () {
         emptyDiv.innerHTML = '<i class="fas fa-folder-open"></i> Empty folder';
         container.appendChild(emptyDiv);
     }
+
+    this.refreshLayout();
 };
 
 app.renderTabs = function () {
@@ -203,8 +207,11 @@ app.renderTabs = function () {
         tab.onclick = () => this.openFile(filename);
         container.appendChild(tab);
     });
+
+    this.refreshLayout();
 };
 
+// FIX: Updated openFile with layout refresh
 app.openFile = function (filename) {
     if (this.files[filename]?.type === 'folder') return;
 
@@ -216,11 +223,24 @@ app.openFile = function (filename) {
     const language = this.getLanguage(filename);
 
     if (this.useFallbackEditor) {
-        document.getElementById('fallback-editor').value = content;
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) fallbackEditor.value = content;
     } else if (this.editor) {
-        const model = monaco.editor.createModel(content, language);
-        this.editor.setModel(model);
-        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
+        try {
+            const model = monaco.editor.createModel(content, language);
+            this.editor.setModel(model);
+            setTimeout(() => {
+                if (this.editor) this.editor.layout();
+            }, 50);
+        } catch (e) {
+            console.error('Monaco error:', e);
+            // Fallback to textarea if Monaco fails
+            const fallbackEditor = document.getElementById('fallback-editor');
+            if (fallbackEditor) {
+                fallbackEditor.value = content;
+                this.useFallbackEditor = true;
+            }
+        }
     }
 
     this.renderTabs();
@@ -228,6 +248,13 @@ app.openFile = function (filename) {
     if (this.isPreviewable(filename)) {
         this.updatePreview();
     }
+
+    // FIX: Refresh layout to ensure chat stays visible
+    setTimeout(() => {
+        if (typeof this.refreshLayout === 'function') {
+            this.refreshLayout();
+        }
+    }, 100);
 };
 
 app.closeFile = function (filename) {
@@ -253,6 +280,7 @@ app.closeFile = function (filename) {
         this.renderFileTree();
         this.updateFolderSelector();
         this.showToast(`Closed ${filename.split('/').pop()}`);
+        this.refreshLayout();
     }
 };
 
@@ -298,6 +326,7 @@ app.confirmCreateFile = function () {
     if (path) document.getElementById('new-file-path').value = '';
     if (name) document.getElementById('new-file-name').value = '';
     this.showToast(`Created ${fullPath}`);
+    this.refreshLayout();
 };
 
 app.createFolder = function () {
@@ -326,6 +355,7 @@ app.createFolder = function () {
     this.updateFolderSelector();
     this.renderFileTree();
     this.showToast(`Created folder ${name}`);
+    this.refreshLayout();
 };
 
 app.isPreviewable = function (filename) {
@@ -337,6 +367,7 @@ app.previewFile = function (filename) {
     this.openFile(filename);
     this.updatePreview();
     this.showToast(`Previewing ${filename.split('/').pop()}`);
+    this.refreshLayout();
 };
 
 app.updatePreview = function () {
@@ -352,6 +383,7 @@ app.updatePreview = function () {
 app.refreshPreview = function () {
     this.updatePreview();
     this.showToast('Preview refreshed');
+    this.refreshLayout();
 };
 
 app.openPreviewInNewTab = function () {
@@ -382,6 +414,7 @@ app.createCheckpoint = function () {
     this.saveToStorage();
     this.renderVersions();
     this.showToast('Checkpoint saved!');
+    this.refreshLayout();
 };
 
 app.restoreVersion = function (id) {
@@ -396,6 +429,7 @@ app.restoreVersion = function (id) {
             this.openFile(this.currentFile);
         }
         this.showToast('Version restored!');
+        this.refreshLayout();
     }
 };
 
