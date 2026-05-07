@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-ai.js
-// AI provider - INFERS file operations from natural responses
+// INTELLIGENT VERSION - AI understands intent, no pattern matching
 // ============================================================
 
 app.saveAISettings = function () {
@@ -44,14 +44,11 @@ app.testOllamaConnection = async function () {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 3000);
-
             const response = await fetch(`${this.ai.endpoint}/api/tags`, {
                 method: 'GET',
                 signal: controller.signal
             });
-
             clearTimeout(timeoutId);
-
             if (response.ok) {
                 const data = await response.json();
                 const models = data.models?.map(m => m.name).join(', ') || 'unknown';
@@ -97,7 +94,6 @@ app.addChatMessage = function (text, sender) {
     const div = document.createElement('div');
     div.className = `chat-bubble ${sender}`;
     let formattedText = text.replace(/\n/g, '<br>');
-    // Preserve code blocks
     formattedText = formattedText.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
         return `<pre style="background:#0f172a; padding:10px; border-radius:8px; overflow-x:auto; margin:8px 0;"><code style="font-family:monospace; font-size:12px;">${code.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
     });
@@ -106,6 +102,9 @@ app.addChatMessage = function (text, sender) {
     container.scrollTop = container.scrollHeight;
 };
 
+// ============================================================
+// MAIN SEND MESSAGE - Two-step AI understanding
+// ============================================================
 app.sendMessage = async function () {
     const input = document.getElementById('chat-input');
     const message = input.value.trim();
@@ -123,335 +122,387 @@ app.sendMessage = async function () {
     statusEl.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Thinking...';
 
     try {
-        const response = await this.callAI(message);
+        // STEP 1: Have the AI understand the user's intent
+        const intent = await this.understandIntent(message);
+        console.log('Understood intent:', intent);
 
-        // Show AI's response
+        // STEP 2: Based on intent, take appropriate action
+        let response = '';
+
+        switch (intent.action) {
+            case 'create_file':
+                response = await this.createFile(intent);
+                break;
+            case 'update_file':
+                response = await this.updateFile(intent);
+                break;
+            case 'delete_file':
+                response = await this.deleteFile(intent);
+                break;
+            case 'explain_code':
+                response = await this.explainCode(intent);
+                break;
+            case 'fix_bugs':
+                response = await this.fixBugs(intent);
+                break;
+            case 'optimize_code':
+                response = await this.optimizeCode(intent);
+                break;
+            case 'general_chat':
+                response = await this.generalChat(message);
+                break;
+            default:
+                response = await this.generalChat(message);
+        }
+
         this.addChatMessage(response, 'ai');
 
-        // INFER file operations from the response (no JSON required from AI)
-        const operations = this.inferFileOperationsFromResponse(response, message);
-
-        if (operations && operations.length > 0) {
-            if (this.ai.autoApply) {
-                const results = this.applyFileOperations(operations);
-                let summary = `\n\n📁 **File changes applied:**\n`;
-                results.success.forEach(s => summary += `• ${s}\n`);
-                if (results.failed.length > 0) {
-                    summary += `\n❌ **Failed:**\n`;
-                    results.failed.forEach(f => summary += `• ${f}\n`);
-                }
-                this.addChatMessage(summary, 'system');
-                this.showToast(`Applied ${results.success.length} file changes`);
-
-                // Refresh UI
-                if (operations.some(op => op.path === this.currentFile)) {
-                    this.openFile(this.currentFile);
-                }
-                this.renderFileTree();
-                this.updateFolderSelector();
-            } else {
-                this.showApplyButton(operations);
-            }
-        }
     } catch (error) {
         console.error('AI Error:', error);
-        let errorMsg = error.message;
-        this.addChatMessage(`Error: ${errorMsg}`, 'ai');
+        this.addChatMessage(`Error: ${error.message}`, 'ai');
     } finally {
         statusEl.innerHTML = originalStatus;
     }
 };
 
-// INFER file operations from the AI's natural language response
-app.inferFileOperationsFromResponse = function (response, userMessage) {
-    const operations = [];
+// ============================================================
+// STEP 1: Understand what the user wants
+// ============================================================
+app.understandIntent = async function (userMessage) {
+    const context = `You are an AI that analyzes user requests and determines what action to take in a code editor.
 
-    // Check if user asked to create something
-    const createPatterns = [
-        /create\s+(?:a\s+)?(?:new\s+)?file\s+['"]?([\w\/\\]+\.\w+)['"]?/i,
-        /make\s+(?:a\s+)?(?:new\s+)?file\s+['"]?([\w\/\\]+\.\w+)['"]?/i,
-        /add\s+(?:a\s+)?(?:new\s+)?file\s+['"]?([\w\/\\]+\.\w+)['"]?/i,
-        /新文件\s+['"]?([\w\/\\]+\.\w+)['"]?/i
-    ];
+Available actions:
+- "create_file": User wants to create a new file
+- "update_file": User wants to modify an existing file  
+- "delete_file": User wants to delete a file
+- "explain_code": User wants explanation of code
+- "fix_bugs": User wants bug fixes
+- "optimize_code": User wants code optimization
+- "general_chat": General conversation or question
 
-    let targetFile = null;
-    for (const pattern of createPatterns) {
-        const match = userMessage.match(pattern);
-        if (match) {
-            targetFile = match[1];
-            break;
+Respond with ONLY a JSON object in this exact format:
+{
+  "action": "action_name",
+  "target_file": "filename.ext" (if applicable, otherwise null),
+  "description": "brief description of what user wants"
+}
+
+If user specifies a filename (e.g., "create test.html", "update style.css"), extract it.
+If user says "this file" or "current file", use "${this.currentFile || 'current file'}".
+
+User message: ${userMessage}
+
+Current open file: ${this.currentFile || 'none'}
+
+Respond with ONLY the JSON.`;
+
+    const response = await this.callAIWithSystemPrompt(context, 'You are an intent analysis system. Output ONLY valid JSON.');
+
+    try {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
         }
+    } catch (e) {
+        console.error('Intent parsing failed:', e);
     }
 
-    // If user specified a file name, look for code blocks in the response
-    if (targetFile) {
-        // Find code blocks in the AI's response
-        const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
-        let match;
-        while ((match = codeBlockRegex.exec(response)) !== null) {
-            const content = match[2];
-            operations.push({
-                action: 'create',
-                path: targetFile,
-                content: content.trim()
-            });
-            break; // Only take the first code block for this file
-        }
-    }
-
-    // Check if user asked to update the current file
-    const updatePatterns = [
-        /update\s+(?:the\s+)?(?:current\s+)?file/i,
-        /modify\s+(?:the\s+)?(?:current\s+)?file/i,
-        /change\s+(?:the\s+)?(?:current\s+)?file/i,
-        /fix\s+(?:the\s+)?(?:current\s+)?file/i,
-        /add\s+to\s+(?:the\s+)?(?:current\s+)?file/i
-    ];
-
-    const wantsUpdate = updatePatterns.some(p => p.test(userMessage));
-    if (wantsUpdate && this.currentFile) {
-        // Look for code block to replace the file content
-        const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
-        let match;
-        while ((match = codeBlockRegex.exec(response)) !== null) {
-            const content = match[2];
-            operations.push({
-                action: 'update',
-                path: this.currentFile,
-                content: content.trim()
-            });
-            break;
-        }
-    }
-
-    // Check if AI's response contains code blocks that look like complete files
-    if (operations.length === 0) {
-        const codeBlockRegex = /```(\w+)\n([\s\S]*?)```/g;
-        let match;
-        let suggestedName = null;
-
-        // Try to infer filename from context
-        const htmlMatch = response.match(/<!DOCTYPE\s+html/i);
-        const cssMatch = response.match(/(?:stylesheet|style)\s+for/i);
-        const jsMatch = response.match(/(?:javascript|script|function)\s+for/i);
-
-        if (htmlMatch) suggestedName = 'index.html';
-        else if (cssMatch) suggestedName = 'style.css';
-        else if (jsMatch) suggestedName = 'script.js';
-
-        while ((match = codeBlockRegex.exec(response)) !== null) {
-            const language = match[1];
-            const content = match[2];
-
-            if (suggestedName) {
-                operations.push({
-                    action: 'create',
-                    path: suggestedName,
-                    content: content.trim()
-                });
-            } else if (language === 'html') {
-                operations.push({
-                    action: 'create',
-                    path: 'index.html',
-                    content: content.trim()
-                });
-            } else if (language === 'css') {
-                operations.push({
-                    action: 'create',
-                    path: 'style.css',
-                    content: content.trim()
-                });
-            } else if (language === 'javascript' || language === 'js') {
-                operations.push({
-                    action: 'create',
-                    path: 'script.js',
-                    content: content.trim()
-                });
-            }
-        }
-    }
-
-    return operations;
+    // Default fallback
+    return { action: 'general_chat', target_file: null, description: userMessage };
 };
 
-// Show apply button for manual approval
-app.showApplyButton = function (operations) {
-    const container = document.getElementById('chat-messages');
-    const buttonDiv = document.createElement('div');
-    buttonDiv.className = 'chat-bubble system';
-    buttonDiv.style.padding = '12px';
-    buttonDiv.style.background = '#1e293b';
-    buttonDiv.style.border = '1px solid #3b82f6';
-    buttonDiv.style.borderRadius = '12px';
+// ============================================================
+// STEP 2: Execute the understood intent
+// ============================================================
 
-    let opsList = '<div style="margin-bottom: 12px;"><strong>📁 Ready to apply these changes?</strong><br>';
-    operations.forEach(op => {
-        const icon = op.action === 'delete' ? '🗑️' : (op.action === 'create' ? '✨' : '📝');
-        opsList += `&nbsp;&nbsp;${icon} ${op.action}: <code>${op.path}</code><br>`;
-    });
-    opsList += '</div>';
+// CREATE FILE
+app.createFile = async function (intent) {
+    const fileName = intent.target_file;
 
-    const applyBtn = document.createElement('button');
-    applyBtn.className = 'btn btn-primary';
-    applyBtn.style.padding = '6px 16px';
-    applyBtn.style.fontSize = '12px';
-    applyBtn.style.marginRight = '8px';
-    applyBtn.innerHTML = '✅ Apply Changes';
-    applyBtn.onclick = () => {
-        const results = this.applyFileOperations(operations);
-        let summary = `✅ Applied ${results.success.length} changes.`;
-        if (results.failed.length > 0) {
-            summary += `\n❌ Failed: ${results.failed.length}`;
-        }
-        this.addChatMessage(summary, 'system');
-        this.showToast(`Applied ${results.success.length} file changes`);
-        buttonDiv.remove();
+    if (!fileName || fileName === 'current file') {
+        return "I'm not sure what file name to use. Could you specify the file name (e.g., 'Create index.html')?";
+    }
+
+    // Check if file already exists
+    if (this.files[fileName] && this.files[fileName].type === 'file') {
+        return `File "${fileName}" already exists. Do you want me to update it instead?`;
+    }
+
+    // Ask AI to generate the file content based on user's description
+    const fileExtension = fileName.split('.').pop();
+    const context = `Create a ${fileExtension} file named "${fileName}" based on this request: "${intent.description}"
+
+Generate the complete file content. Respond with ONLY the file content in a markdown code block.
+
+Example format:
+\`\`\`${fileExtension}
+[file content here]
+\`\`\``;
+
+    const contentResponse = await this.callAIWithSystemPrompt(context, 'You are a code generator. Output only the file content in a markdown code block.');
+
+    // Extract code block
+    const codeMatch = contentResponse.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    const fileContent = codeMatch ? codeMatch[1].trim() : contentResponse.trim();
+
+    // Create the file
+    this.files[fileName] = { content: fileContent, type: 'file' };
+    this.saveToStorage();
+    this.renderFileTree();
+    this.updateFolderSelector();
+
+    // Open the newly created file
+    this.openFile(fileName);
+
+    return `✅ Created "${fileName}"\n\nThe file has been created and opened in the editor. You can now edit it directly.`;
+};
+
+// UPDATE FILE
+app.updateFile = async function (intent) {
+    let fileName = intent.target_file;
+
+    if (!fileName || fileName === 'current file' || fileName === 'this file') {
+        fileName = this.currentFile;
+    }
+
+    if (!fileName || !this.files[fileName]) {
+        return "I'm not sure which file to update. Could you specify the file name or open the file you want me to modify?";
+    }
+
+    const currentContent = this.files[fileName].content || '';
+    const fileExtension = fileName.split('.').pop();
+
+    const context = `Update the file "${fileName}" based on this request: "${intent.description}"
+
+Current file content:
+\`\`\`${fileExtension}
+${currentContent}
+\`\`\`
+
+Generate the COMPLETE updated file content. Respond with ONLY the new content in a markdown code block.
+
+\`\`\`${fileExtension}
+[updated content here]
+\`\`\``;
+
+    const contentResponse = await this.callAIWithSystemPrompt(context, 'You are a code editor. Output only the updated file content in a markdown code block.');
+
+    const codeMatch = contentResponse.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    const newContent = codeMatch ? codeMatch[1].trim() : contentResponse.trim();
+
+    // Update the file
+    this.files[fileName].content = newContent;
+    this.saveToStorage();
+
+    // Refresh the editor if it's the current file
+    if (this.currentFile === fileName) {
+        this.openFile(fileName);
+    }
+
+    return `✅ Updated "${fileName}"\n\nThe file has been modified according to your request.`;
+};
+
+// DELETE FILE
+app.deleteFile = async function (intent) {
+    let fileName = intent.target_file;
+
+    if (!fileName || fileName === 'current file' || fileName === 'this file') {
+        fileName = this.currentFile;
+    }
+
+    if (!fileName || !this.files[fileName]) {
+        return "I'm not sure which file to delete. Could you specify the file name?";
+    }
+
+    // Ask for confirmation
+    return `⚠️ Are you sure you want to delete "${fileName}"? If yes, please type "Confirm delete ${fileName}" to proceed.`;
+};
+
+// Confirm deletion (called separately)
+app.confirmDeleteFile = function (fileName) {
+    if (this.files[fileName]) {
+        delete this.files[fileName];
+        this.saveToStorage();
         this.renderFileTree();
         this.updateFolderSelector();
-        if (operations.some(op => op.path === this.currentFile)) {
-            this.openFile(this.currentFile);
-        }
-    };
 
-    const dismissBtn = document.createElement('button');
-    dismissBtn.className = 'btn btn-secondary';
-    dismissBtn.style.padding = '6px 16px';
-    dismissBtn.style.fontSize = '12px';
-    dismissBtn.innerHTML = '❌ Dismiss';
-    dismissBtn.onclick = () => buttonDiv.remove();
-
-    buttonDiv.innerHTML = opsList;
-    buttonDiv.appendChild(applyBtn);
-    buttonDiv.appendChild(dismissBtn);
-    container.appendChild(buttonDiv);
-    container.scrollTop = container.scrollHeight;
-};
-
-// Helper method to get project context
-app.getProjectContext = function () {
-    let context = '# Full Project Context\n\n';
-    let totalSize = 0;
-    const MAX_SIZE = 10240;
-
-    for (const [path, fileData] of Object.entries(this.files)) {
-        if (fileData.type === 'file') {
-            const content = fileData.content || '';
-            const size = content.length;
-            totalSize += Math.min(size, MAX_SIZE);
-
-            context += `## File: ${path}\n`;
-            if (size > MAX_SIZE) {
-                context += `[File truncated: ${(size / 1024).toFixed(1)}KB]\n`;
-                context += '```\n' + content.substring(0, MAX_SIZE) + '\n```\n\n';
+        if (this.currentFile === fileName) {
+            const remaining = Object.keys(this.files).find(f => this.files[f].type === 'file');
+            if (remaining) {
+                this.openFile(remaining);
             } else {
-                context += '```\n' + content + '\n```\n\n';
+                this.currentFile = null;
+                if (this.editor) this.editor.setValue('');
             }
         }
+        return `✅ Deleted "${fileName}"`;
     }
-
-    return context;
+    return `❌ File "${fileName}" not found`;
 };
 
-// Helper method to apply file operations
-app.applyFileOperations = function (operations) {
-    const results = { success: [], failed: [] };
+// EXPLAIN CODE
+app.explainCode = async function (intent) {
+    let fileName = intent.target_file;
 
-    for (const op of operations) {
-        try {
-            switch (op.action) {
-                case 'create':
-                case 'update':
-                    const pathParts = op.path.split('/');
-                    if (pathParts.length > 1) {
-                        let currentPath = '';
-                        for (let i = 0; i < pathParts.length - 1; i++) {
-                            currentPath = currentPath ? currentPath + pathParts[i] + '/' : pathParts[i] + '/';
-                            if (!this.files[currentPath]) {
-                                this.files[currentPath] = { content: null, type: 'folder' };
-                            }
-                        }
-                    }
-                    this.files[op.path] = { content: op.content || '', type: 'file' };
-                    results.success.push(`${op.action} ${op.path}`);
-                    break;
+    if (!fileName || fileName === 'current file' || fileName === 'this file') {
+        fileName = this.currentFile;
+    }
 
-                case 'delete':
-                    if (this.files[op.path]) {
-                        delete this.files[op.path];
-                        results.success.push(`delete ${op.path}`);
-                    } else {
-                        results.failed.push(`delete ${op.path} (file not found)`);
-                    }
-                    break;
+    if (!fileName || !this.files[fileName]) {
+        return "Please open the file you want me to explain, or specify a file name.";
+    }
 
-                default:
-                    results.failed.push(`unknown action: ${op.action}`);
-            }
-        } catch (error) {
-            results.failed.push(`${op.action} ${op.path}: ${error.message}`);
+    const content = this.files[fileName].content || '';
+    const fileExtension = fileName.split('.').pop();
+
+    const context = `Explain the following ${fileExtension} code to the user. Be clear, educational, and helpful.
+
+User request: "${intent.description}"
+
+Code to explain:
+\`\`\`${fileExtension}
+${content}
+\`\`\`
+
+Provide a clear, well-structured explanation.`;
+
+    return await this.callAIWithSystemPrompt(context, 'You are a helpful coding teacher. Provide clear explanations.');
+};
+
+// FIX BUGS
+app.fixBugs = async function (intent) {
+    let fileName = intent.target_file;
+
+    if (!fileName || fileName === 'current file' || fileName === 'this file') {
+        fileName = this.currentFile;
+    }
+
+    if (!fileName || !this.files[fileName]) {
+        return "Please open the file you want me to fix, or specify a file name.";
+    }
+
+    const currentContent = this.files[fileName].content || '';
+    const fileExtension = fileName.split('.').pop();
+
+    const context = `Fix bugs in the following ${fileExtension} code. User request: "${intent.description}"
+
+Current code:
+\`\`\`${fileExtension}
+${currentContent}
+\`\`\`
+
+First, explain what bugs you found. Then provide the complete fixed code in a markdown code block.
+
+\`\`\`${fileExtension}
+[fixed code here]
+\`\`\``;
+
+    const response = await this.callAIWithSystemPrompt(context, 'You are a debugging expert.');
+
+    // Check if response contains a code block for auto-apply
+    const codeMatch = response.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    if (codeMatch && this.ai.autoApply) {
+        const fixedContent = codeMatch[1].trim();
+        this.files[fileName].content = fixedContent;
+        this.saveToStorage();
+        if (this.currentFile === fileName) {
+            this.openFile(fileName);
         }
+        return response + `\n\n✅ Changes have been automatically applied to "${fileName}".`;
     }
 
-    this.saveToStorage();
-    return results;
+    return response;
 };
 
-app.callAI = async function (message) {
-    const { provider, apiKey, model, endpoint } = this.ai;
-    const config = this.providers[provider];
+// OPTIMIZE CODE
+app.optimizeCode = async function (intent) {
+    let fileName = intent.target_file;
 
+    if (!fileName || fileName === 'current file' || fileName === 'this file') {
+        fileName = this.currentFile;
+    }
+
+    if (!fileName || !this.files[fileName]) {
+        return "Please open the file you want me to optimize, or specify a file name.";
+    }
+
+    const currentContent = this.files[fileName].content || '';
+    const fileExtension = fileName.split('.').pop();
+
+    const context = `Optimize the following ${fileExtension} code for better performance, readability, and maintainability. User request: "${intent.description}"
+
+Current code:
+\`\`\`${fileExtension}
+${currentContent}
+\`\`\`
+
+First, explain your optimizations. Then provide the complete optimized code in a markdown code block.
+
+\`\`\`${fileExtension}
+[optimized code here]
+\`\`\``;
+
+    const response = await this.callAIWithSystemPrompt(context, 'You are a code optimization expert.');
+
+    const codeMatch = response.match(/```(?:\w+)?\n([\s\S]*?)```/);
+    if (codeMatch && this.ai.autoApply) {
+        const optimizedContent = codeMatch[1].trim();
+        this.files[fileName].content = optimizedContent;
+        this.saveToStorage();
+        if (this.currentFile === fileName) {
+            this.openFile(fileName);
+        }
+        return response + `\n\n✅ Optimized code has been automatically applied to "${fileName}".`;
+    }
+
+    return response;
+};
+
+// GENERAL CHAT
+app.generalChat = async function (message) {
     const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
     const fileName = this.currentFile || 'none';
     const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
 
-    const projectContext = this.getProjectContext();
+    const projectFiles = Object.keys(this.files).filter(f => this.files[f].type === 'file').join(', ');
 
-    const context = `You are DevStudio AI, a helpful coding assistant.
+    const context = `You are DevStudio AI, a helpful coding assistant integrated into a code editor.
 
-Project files:
-${projectContext}
-
+Current project files: ${projectFiles || 'no files yet'}
 Currently open file: ${fileName}
-Current content:
+
+${fileName !== 'none' ? `Current code in open file:
 \`\`\`${fileExt}
-${currentCode || '(empty)'}
-\`\`\`
+${currentCode || '(empty file)'}
+\`\`\`` : ''}
 
-User request: ${message}
+User message: ${message}
 
-Please help the user with their request. Be helpful and provide code examples when relevant.`;
+Respond helpfully and conversationally. You have the ability to create, modify, and delete files if the user asks. Be direct and helpful.`;
+
+    return await this.callAIWithSystemPrompt(context, 'You are a helpful coding assistant. Be conversational and helpful.');
+};
+
+// ============================================================
+// Core AI calling function
+// ============================================================
+app.callAIWithSystemPrompt = async function (userPrompt, systemPrompt) {
+    const { provider, apiKey, model, endpoint } = this.ai;
+    const config = this.providers[provider];
 
     if (provider === 'local') {
         const ollamaUrl = (endpoint || 'http://localhost:11434').replace(/\/$/, '');
         const finalModel = model || 'gemma4:latest';
 
+        // Check Ollama connection
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
-
-            const testResponse = await fetch(`${ollamaUrl}/api/tags`, {
-                method: 'GET',
-                signal: controller.signal
-            });
-
+            const testResponse = await fetch(`${ollamaUrl}/api/tags`, { method: 'GET', signal: controller.signal });
             clearTimeout(timeoutId);
-
-            if (!testResponse.ok) {
-                throw new Error(`Ollama server not responding at ${ollamaUrl}`);
-            }
-
-            const tagsData = await testResponse.json();
-            const modelExists = tagsData.models?.some(m => m.name === finalModel);
-
-            if (!modelExists) {
-                const availableModels = tagsData.models?.map(m => m.name).join(', ') || 'none';
-                throw new Error(`Model '${finalModel}' not found. Available: ${availableModels}\n\nRun: ollama pull ${finalModel}`);
-            }
+            if (!testResponse.ok) throw new Error(`Ollama not responding at ${ollamaUrl}`);
         } catch (testError) {
-            if (testError.name === 'AbortError') {
-                throw new Error(`Ollama timeout at ${ollamaUrl}\n\nMake sure Ollama is running:\n• Run 'ollama serve' in terminal\n• Then run: ollama pull ${finalModel}`);
-            }
-            throw testError;
+            throw new Error(`Ollama not running. Run 'ollama serve' then 'ollama pull ${finalModel}'`);
         }
 
         const response = await fetch(`${ollamaUrl}/api/generate`, {
@@ -459,27 +510,16 @@ Please help the user with their request. Be helpful and provide code examples wh
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: finalModel,
-                prompt: context,
+                prompt: `${systemPrompt}\n\n${userPrompt}`,
                 stream: false,
-                options: {
-                    temperature: 0.7,
-                    num_predict: 8192,
-                    top_p: 0.9
-                }
+                options: { temperature: 0.7, num_predict: 8192, top_p: 0.9 }
             })
         });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Ollama API error (${response.status}): ${errorText.substring(0, 200)}`);
-        }
-
+        if (!response.ok) throw new Error(`Ollama error: ${response.status}`);
         const data = await response.json();
-        let reply = data.response || "I'm having trouble responding right now. Please try again.";
-
-        reply = reply.replace(/<\/?s>/g, '');
-        reply = reply.replace(/<\|[^>]+\|>/g, '');
-
+        let reply = data.response || "No response";
+        reply = reply.replace(/<\/?s>/g, '').replace(/<\|[^>]+\|>/g, '');
         return reply;
     }
 
@@ -492,7 +532,10 @@ Please help the user with their request. Be helpful and provide code examples wh
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'user', content: context }],
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
             temperature: 0.7,
             max_tokens: 8192
         });
@@ -503,14 +546,14 @@ Please help the user with their request. Be helpful and provide code examples wh
             model: model || config.defaultModel,
             max_tokens: 8192,
             temperature: 0.7,
-            messages: [{ role: 'user', content: context }]
+            messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }]
         });
     } else if (provider === 'google') {
         const useModel = model || config.defaultModel;
         url = `https://generativelanguage.googleapis.com/v1beta/models/${useModel}:generateContent?key=${effectiveKey}`;
         headers = { 'Content-Type': 'application/json' };
         body = JSON.stringify({
-            contents: [{ parts: [{ text: context }] }],
+            contents: [{ parts: [{ text: `${systemPrompt}\n\n${userPrompt}` }] }],
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
         });
     } else {
@@ -518,47 +561,43 @@ Please help the user with their request. Be helpful and provide code examples wh
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
             model: model || config.defaultModel,
-            messages: [{ role: 'user', content: context }],
+            messages: [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }],
             temperature: 0.7
         });
     }
 
     const response = await fetch(url, { method: 'POST', headers, body });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`${response.status}: ${errorText.substring(0, 200)}`);
-    }
+    if (!response.ok) throw new Error(`${provider} error: ${response.status}`);
 
     const data = await response.json();
-
     if (provider === 'anthropic') return data.content[0].text;
     if (provider === 'google') return data.candidates[0].content.parts[0].text;
     return data.choices[0].message.content;
 };
 
+// ============================================================
+// UI Helper Methods
+// ============================================================
 app.quickAction = function (action) {
     const chatInput = document.getElementById('chat-input');
     if (!chatInput) return;
 
     switch (action) {
         case 'explain':
-            chatInput.value = `Can you explain how the code in ${this.currentFile || 'the current file'} works?`;
+            chatInput.value = `Explain the current file`;
             break;
         case 'fix':
-            chatInput.value = `Please help me fix bugs in ${this.currentFile || 'the current file'}.`;
+            chatInput.value = `Fix bugs in the current file`;
             break;
         case 'optimize':
-            chatInput.value = `Can you optimize ${this.currentFile || 'the current file'} for better performance?`;
+            chatInput.value = `Optimize the current file`;
             break;
         case 'document':
-            chatInput.value = `Please add documentation to ${this.currentFile || 'the current file'}.`;
+            chatInput.value = `Add documentation to the current file`;
             break;
         case 'test':
-            chatInput.value = `Can you write tests for ${this.currentFile || 'the current file'}?`;
+            chatInput.value = `Write tests for the current file`;
             break;
-        default:
-            chatInput.value = action;
     }
     this.sendMessage();
 };
@@ -596,20 +635,13 @@ app.toggleChat = function () {
 app.toggleSettings = function () {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.remove('hidden');
-    const providerSelect = document.getElementById('ai-provider');
-    if (providerSelect) providerSelect.value = this.ai.provider;
-    const apiKeyInput = document.getElementById('ai-api-key');
-    if (apiKeyInput) apiKeyInput.value = this.ai.apiKey;
-    const modelInput = document.getElementById('ai-model');
-    if (modelInput) modelInput.value = this.ai.model;
-    const endpointInput = document.getElementById('ai-endpoint');
-    if (endpointInput) endpointInput.value = this.ai.endpoint;
-    const themeSelect = document.getElementById('editor-theme');
-    if (themeSelect) themeSelect.value = this.settings.theme;
-    const fontSizeInput = document.getElementById('editor-font-size');
-    if (fontSizeInput) fontSizeInput.value = this.settings.fontSize;
-    const autoApplyCheckbox = document.getElementById('ai-auto-apply');
-    if (autoApplyCheckbox) autoApplyCheckbox.checked = this.ai.autoApply || false;
+    document.getElementById('ai-provider').value = this.ai.provider;
+    document.getElementById('ai-api-key').value = this.ai.apiKey;
+    document.getElementById('ai-model').value = this.ai.model;
+    document.getElementById('ai-endpoint').value = this.ai.endpoint;
+    document.getElementById('editor-theme').value = this.settings.theme;
+    document.getElementById('editor-font-size').value = this.settings.fontSize;
+    document.getElementById('ai-auto-apply').checked = this.ai.autoApply || false;
     this.updateProviderHelp();
     this.handleProviderChange();
 };
@@ -622,26 +654,6 @@ app.updateProviderHelp = function () {
 
     const endpointContainer = document.getElementById('local-endpoint-container');
     if (endpointContainer) endpointContainer.style.display = provider === 'local' ? 'block' : 'none';
-
-    const corsWarning = document.getElementById('cors-warning');
-    if (corsWarning && config) corsWarning.style.display = config.cors ? 'block' : 'none';
-
-    const hint = document.getElementById('api-key-hint');
-    if (hint) {
-        if (provider === 'kimi') {
-            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
-            hint.style.color = '#fbbf24';
-        } else if (provider === 'deepseek') {
-            hint.textContent = 'Deepseek: Requires paid credits';
-            hint.style.color = '#f87171';
-        } else if (provider === 'local') {
-            hint.textContent = '✨ No API key needed - runs locally on your machine!';
-            hint.style.color = '#10b981';
-        } else {
-            hint.textContent = 'Enter your API key for the selected provider';
-            hint.style.color = '#64748b';
-        }
-    }
 };
 
 app.updateEditorTheme = function () {
@@ -663,19 +675,7 @@ app.saveToStorage = function () {
         currentFolder: this.currentFolder,
         currentFile: this.currentFile
     };
-
-    if (window.isElectron && window.require) {
-        try {
-            const Store = window.require('electron-store');
-            const store = new Store();
-            store.set('devstudio-data', data);
-        } catch (e) {
-            console.error('Electron store error:', e);
-            localStorage.setItem('devstudio_data', JSON.stringify(data));
-        }
-    } else {
-        localStorage.setItem('devstudio_data', JSON.stringify(data));
-    }
+    localStorage.setItem('devstudio_data', JSON.stringify(data));
 };
 
 app.showToast = function (message, duration = 3000) {
@@ -683,7 +683,6 @@ app.showToast = function (message, duration = 3000) {
     toast.className = 'toast';
     toast.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${message}`;
     document.body.appendChild(toast);
-
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
@@ -707,7 +706,6 @@ app.updateProviderUI = function () {
     if (badge) {
         badge.className = `provider-badge ${badgeClass}`;
         badge.textContent = provider === 'local' ? 'Ollama' : this.providers[provider]?.name || provider;
-        badge.style.display = 'inline-flex';
     }
 };
 
@@ -727,136 +725,63 @@ app.handleProviderChange = function () {
 
     const helpText = document.getElementById('provider-help');
     if (helpText && config) helpText.textContent = config.help;
-
-    const corsWarning = document.getElementById('cors-warning');
-    if (corsWarning) {
-        corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
-    }
-
-    const hint = document.getElementById('api-key-hint');
-    if (hint) {
-        if (provider === 'kimi') {
-            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
-            hint.style.color = '#fbbf24';
-        } else if (provider === 'deepseek') {
-            hint.textContent = 'Deepseek: Requires paid credits';
-            hint.style.color = '#f87171';
-        } else if (provider === 'local') {
-            hint.textContent = '✨ No API key needed - runs locally on your machine!';
-            hint.style.color = '#10b981';
-        } else {
-            hint.textContent = 'Enter your API key for the selected provider';
-            hint.style.color = '#64748b';
-        }
-    }
 };
 
-// UI update methods needed for refresh
+// UI methods needed for refresh
 app.renderFileTree = function () {
     const container = document.getElementById('file-tree');
     if (!container) return;
     container.innerHTML = '';
 
-    const items = [];
-    Object.keys(this.files).forEach(path => {
-        const fileData = this.files[path];
-        if (fileData.type === 'folder') {
-            if (this.currentFolder === '') {
-                if (!path.slice(0, -1).includes('/')) {
-                    items.push({ path, type: 'folder', data: fileData });
-                }
-            } else {
-                if (path.startsWith(this.currentFolder) && path !== this.currentFolder) {
-                    const remaining = path.slice(this.currentFolder.length);
-                    if (remaining && !remaining.slice(0, -1).includes('/')) {
-                        items.push({ path, type: 'folder', data: fileData });
-                    }
-                }
-            }
-        } else {
-            if (this.currentFolder === '') {
-                if (!path.includes('/')) {
-                    items.push({ path, type: 'file', data: fileData });
-                }
-            } else {
-                if (path.startsWith(this.currentFolder)) {
-                    const remaining = path.slice(this.currentFolder.length);
-                    if (remaining && !remaining.includes('/')) {
-                        items.push({ path, type: 'file', data: fileData });
-                    }
-                }
-            }
-        }
-    });
+    const files = Object.keys(this.files).filter(path => this.files[path].type !== 'folder');
+    files.sort();
 
-    items.sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
-        return a.path.localeCompare(b.path);
-    });
-
-    items.forEach(item => {
+    files.forEach(path => {
         const div = document.createElement('div');
-        div.className = `tree-item ${this.currentFile === item.path ? 'active' : ''}`;
-        const name = item.type === 'folder'
-            ? item.path.replace(/\/$/, '').split('/').pop()
-            : item.path.split('/').pop();
-        div.innerHTML = `<span class="chevron" style="visibility: hidden;"></span><i class="fas ${item.type === 'folder' ? 'fa-folder' : 'fa-file-code'} icon"></i><span class="name">${name}</span>`;
-        if (item.type === 'folder') {
-            div.onclick = () => this.changeFolder(item.path);
-        } else {
-            div.onclick = () => this.openFile(item.path);
-        }
+        div.className = `tree-item ${this.currentFile === path ? 'active' : ''}`;
+        const fileName = path.split('/').pop();
+
+        const ext = fileName.split('.').pop();
+        let iconClass = 'fa-file-code';
+        if (ext === 'html') iconClass = 'fa-html5';
+        else if (ext === 'css') iconClass = 'fa-css3';
+        else if (ext === 'js') iconClass = 'fa-js';
+
+        div.innerHTML = `<i class="fab ${iconClass} icon" style="width: 18px;"></i><span class="name" style="flex:1;">${fileName}</span>`;
+        div.onclick = () => this.openFile(path);
         container.appendChild(div);
     });
+
+    if (files.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-500 text-center p-4">No files yet.<br>Create one with the + button.</div>';
+    }
 };
 
 app.updateFolderSelector = function () {
     const select = document.getElementById('folder-select');
     if (!select) return;
     select.innerHTML = '<option value="">📁 Root</option>';
-    const folders = new Set();
-    Object.keys(this.files).forEach(path => {
-        if (this.files[path].type === 'folder') folders.add(path);
-        if (path.includes('/')) {
-            const parts = path.split('/');
-            let currentPath = '';
-            for (let i = 0; i < parts.length - 1; i++) {
-                if (parts[i]) {
-                    currentPath = currentPath ? currentPath + parts[i] + '/' : parts[i] + '/';
-                    folders.add(currentPath);
-                }
-            }
-        }
-    });
-    folders.forEach(folder => {
-        const option = document.createElement('option');
-        option.value = folder;
-        option.textContent = `📁 ${folder}`;
-        if (this.currentFolder === folder) option.selected = true;
-        select.appendChild(option);
-    });
 };
 
 app.openFile = function (filename) {
     if (this.files[filename]?.type === 'folder') return;
     this.currentFile = filename;
     const content = this.files[filename]?.content || '';
-    if (this.useFallbackEditor) {
-        document.getElementById('fallback-editor').value = content;
-    } else if (this.editor) {
-        const language = filename.split('.').pop();
+    if (this.editor) {
+        const ext = filename.split('.').pop();
+        let language = 'plaintext';
+        if (ext === 'js') language = 'javascript';
+        else if (ext === 'html') language = 'html';
+        else if (ext === 'css') language = 'css';
+        else if (ext === 'json') language = 'json';
+        else if (ext === 'py') language = 'python';
+
         const model = monaco.editor.createModel(content, language);
         this.editor.setModel(model);
+        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
     }
     this.renderFileTree();
     if (filename.endsWith('.html') && typeof this.updatePreview === 'function') {
         this.updatePreview();
     }
-};
-
-app.changeFolder = function (folder) {
-    this.currentFolder = folder;
-    this.renderFileTree();
-    this.updateFolderSelector();
-    this.saveToStorage();
 };
