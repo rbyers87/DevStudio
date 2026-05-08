@@ -846,36 +846,6 @@ app.handleProviderChange = function () {
     }
 };
 
-// UI methods needed for refresh
-app.renderFileTree = function () {
-    const container = document.getElementById('file-tree');
-    if (!container) return;
-    container.innerHTML = '';
-
-    const files = Object.keys(this.files).filter(path => this.files[path].type !== 'folder');
-    files.sort();
-
-    files.forEach(path => {
-        const div = document.createElement('div');
-        div.className = `tree-item ${this.currentFile === path ? 'active' : ''}`;
-        const fileName = path.split('/').pop();
-
-        const ext = fileName.split('.').pop();
-        let iconClass = 'fa-file-code';
-        if (ext === 'html') iconClass = 'fa-html5';
-        else if (ext === 'css') iconClass = 'fa-css3';
-        else if (ext === 'js') iconClass = 'fa-js';
-
-        div.innerHTML = `<i class="fab ${iconClass} icon" style="width: 18px;"></i><span class="name" style="flex:1;">${fileName}</span>`;
-        div.onclick = () => this.openFile(path);
-        container.appendChild(div);
-    });
-
-    if (files.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-500 text-center p-4">No files yet.<br>Create one with the + button.</div>';
-    }
-};
-
 app.updateFolderSelector = function () {
     const select = document.getElementById('folder-select');
     if (!select) return;
