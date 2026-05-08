@@ -499,11 +499,11 @@ app.generalChat = async function (message) {
     if (this.pendingProject && this.pendingProject.action === 'create_project') {
         const lowerMsg = message.toLowerCase();
         if (lowerMsg.includes('yes') || lowerMsg.includes('yeah') || lowerMsg.includes('sure') || lowerMsg.includes('ok') || lowerMsg.includes('proceed')) {
+            const projectName = this.pendingProject.name;
+            const projectDescription = this.pendingProject.description;
+            // Clear pending BEFORE calling to avoid re-entry
             this.pendingProject = null;
-            const result = await this.createAndPushToGitHub(
-                this.pendingProject?.description || message,
-                this.pendingProject?.name || 'my-project'
-            );
+            const result = await this.createAndPushToGitHub(projectDescription, projectName);
             if (result) {
                 return `✅ Project creation complete! Check the sidebar for your files.`;
             } else {

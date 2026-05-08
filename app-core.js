@@ -402,10 +402,9 @@ const app = {
 
     // ============================================================
     // NEW PROJECT FROM CHAT & GITHUB REPO CREATION
-    // Add this entire block to app-core.js before the final }
     // ============================================================
 
-    app.initNewProject = async function (projectDescription, projectName) {
+    initNewProject: async function (projectDescription, projectName) {
         this.showToast(`Creating project: ${projectName}...`);
 
         const systemPrompt = `You are a full-stack developer. Create a complete web application project based on the user's description.
@@ -468,9 +467,9 @@ Respond with ONLY the JSON object.`;
             this.showToast(`Error creating project: ${error.message}`);
             return false;
         }
-    };
+    },
 
-    app.createGitHubRepo = async function (repoName, description = '', isPrivate = false) {
+    createGitHubRepo: async function (repoName, description = '', isPrivate = false) {
         if (!this.github.token) {
             this.showToast('Please connect to GitHub first');
             return null;
@@ -511,11 +510,16 @@ Respond with ONLY the JSON object.`;
             this.showToast(`Error creating repo: ${error.message}`);
             return null;
         }
-    };
+    },
 
-    app.createAndPushToGitHub = async function (projectDescription, projectName, repoDescription = '') {
+    createAndPushToGitHub: async function (projectDescription, projectName, repoDescription = '') {
+        // Store pending info before async operations
+        const desc = projectDescription;
+        const name = projectName;
+        const repoDesc = repoDescription;
+
         // Step 1: Create the project
-        const projectCreated = await this.initNewProject(projectDescription, projectName);
+        const projectCreated = await this.initNewProject(desc, name);
         if (!projectCreated) return false;
 
         // Step 2: Check if connected to GitHub
@@ -529,17 +533,19 @@ Respond with ONLY the JSON object.`;
         }
 
         // Step 3: Create GitHub repo
-        const repo = await this.createGitHubRepo(projectName, repoDescription || projectDescription, false);
+        const repo = await this.createGitHubRepo(name, repoDesc || desc, false);
         if (!repo) return false;
 
         // Step 4: Push files to GitHub
         this.showToast('Pushing files to GitHub...');
         await this.deployToGitHub();
 
-        this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${projectName}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
+        if (typeof this.addChatMessage === 'function') {
+            this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${name}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
+        }
 
         return true;
-    };
+    },
 
     initDemoFiles() {
         this.files = {
