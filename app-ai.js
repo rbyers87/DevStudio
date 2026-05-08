@@ -719,19 +719,61 @@ app.updateProviderUI = function () {
 app.handleProviderChange = function () {
     const provider = document.getElementById('ai-provider').value;
     const config = this.providers[provider];
-    const modelInput = document.getElementById('ai-model');
     const endpointContainer = document.getElementById('local-endpoint-container');
+    const apiKeyContainer = document.getElementById('api-key-container');
 
+    // Update model dropdown - THIS SHOULD NOW WORK CORRECTLY
+    this.updateModelDropdown();
+
+    // Handle endpoint visibility (only for local/Ollama)
     if (provider === 'local' && endpointContainer) {
         endpointContainer.style.display = 'block';
-        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
     } else if (endpointContainer) {
         endpointContainer.style.display = 'none';
-        if (modelInput && config) modelInput.placeholder = config.models[0];
     }
 
+    // Handle API key visibility (hide for local)
+    if (apiKeyContainer) {
+        if (provider === 'local') {
+            apiKeyContainer.style.display = 'none';
+        } else {
+            apiKeyContainer.style.display = 'block';
+        }
+    }
+
+    // Update help text
     const helpText = document.getElementById('provider-help');
-    if (helpText && config) helpText.textContent = config.help;
+    if (helpText && config) {
+        if (provider === 'local') {
+            helpText.innerHTML = '<i class="fas fa-check-circle"></i> Local Ollama - No API key needed! Make sure Ollama is running on your computer.';
+        } else {
+            helpText.textContent = config.help;
+        }
+    }
+
+    // Update API key hint
+    const hint = document.getElementById('api-key-hint');
+    if (hint) {
+        if (provider === 'local') {
+            hint.innerHTML = '<i class="fas fa-check-circle"></i> ✨ No API key needed - runs locally on your machine!';
+            hint.style.color = '#10b981';
+        } else if (provider === 'kimi') {
+            hint.innerHTML = '<i class="fas fa-info-circle"></i> Kimi: FREE credits but may have CORS issues. Get key from platform.moonshot.cn';
+            hint.style.color = '#fbbf24';
+        } else if (provider === 'deepseek') {
+            hint.innerHTML = '<i class="fas fa-info-circle"></i> Deepseek: Paid API. Get key from platform.deepseek.com';
+            hint.style.color = '#f87171';
+        } else {
+            hint.innerHTML = `<i class="fas fa-info-circle"></i> Enter your API key for ${config.name}. Get it from their platform.`;
+            hint.style.color = '#64748b';
+        }
+    }
+
+    // Update CORS warning
+    const corsWarning = document.getElementById('cors-warning');
+    if (corsWarning) {
+        corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
+    }
 };
 
 // UI methods needed for refresh
@@ -812,36 +854,50 @@ app.updateModelDropdown = function () {
     // Clear container
     modelContainer.innerHTML = '';
 
+    // FIX: Check for 'local' provider specifically
     if (provider === 'local') {
-        // Local Ollama - text input
+        // Local Ollama - text input (NOT a dropdown)
         const input = document.createElement('input');
         input.type = 'text';
         input.id = 'ai-model';
         input.className = 'input mt-1';
-        input.value = currentValue || config.defaultModel;
-        input.placeholder = 'gemma4:latest, codellama, llama3, mistral';
+        input.value = currentValue || this.ai.model || config.defaultModel || 'gemma4:latest';
+        input.placeholder = 'gemma4:latest, codellama, llama3, mistral, phi3, etc.';
         modelContainer.appendChild(input);
 
+        // Add note about ollama list command
         const note = document.createElement('p');
         note.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;';
-        note.innerHTML = '<i class="fas fa-info-circle"></i> Use exact model name from `ollama list`';
+        note.innerHTML = '<i class="fas fa-terminal"></i> Run `ollama list` in terminal to see installed models';
         modelContainer.appendChild(note);
+
+        // Add save listener
+        input.addEventListener('change', () => {
+            this.ai.model = input.value;
+        });
+
+        // Try to fetch and show installed models as suggestions
+        this.fetchOllamaModelsForInput(input);
     } else {
         // Cloud providers - dropdown
         const select = document.createElement('select');
         select.id = 'ai-model';
         select.className = 'input mt-1';
 
-        config.models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model;
-            option.textContent = model;
-            if (currentValue === model || (!currentValue && model === config.defaultModel)) {
-                option.selected = true;
-            }
-            select.appendChild(option);
-        });
+        // Add models from config
+        if (config.models && config.models.length > 0) {
+            config.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                if (currentValue === model || (!currentValue && model === config.defaultModel)) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        }
 
+        // Add custom option
         const customOption = document.createElement('option');
         customOption.value = '__custom__';
         customOption.textContent = '🔧 Enter custom model...';
@@ -873,6 +929,12 @@ app.updateModelDropdown = function () {
                 };
                 modelContainer.appendChild(backBtn);
                 customInput.focus();
+
+                customInput.addEventListener('change', () => {
+                    this.ai.model = customInput.value;
+                });
+            } else {
+                this.ai.model = select.value;
             }
         };
 
@@ -881,29 +943,25 @@ app.updateModelDropdown = function () {
         note.innerHTML = config.help;
         modelContainer.appendChild(note);
     }
-
-    // Save model when changed
-    const newModelInput = document.getElementById('ai-model');
-    if (newModelInput) {
-        newModelInput.addEventListener('change', () => {
-            this.ai.model = newModelInput.value;
-        });
-    }
 };
 
-app.fetchOllamaModels = async function () {
-    if (this.ai.provider !== 'local') return;
+// Add this new helper method for Ollama
+app.fetchOllamaModelsForInput = async function (inputElement) {
+    if (!inputElement) return;
 
     try {
         const endpoint = this.ai.endpoint || 'http://localhost:11434';
-        const response = await fetch(`${endpoint}/api/tags`);
+        const response = await fetch(`${endpoint}/api/tags`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(2000)
+        });
+
         if (response.ok) {
             const data = await response.json();
             const models = data.models || [];
-            const modelInput = document.getElementById('ai-model');
 
-            if (models.length > 0 && modelInput && modelInput.tagName === 'INPUT') {
-                // Add datalist for autocomplete
+            if (models.length > 0) {
+                // Create datalist for autocomplete
                 const datalistId = 'ollama-models-datalist';
                 let datalist = document.getElementById(datalistId);
                 if (!datalist) {
@@ -912,50 +970,40 @@ app.fetchOllamaModels = async function () {
                     document.body.appendChild(datalist);
                 }
                 datalist.innerHTML = '';
+
                 models.forEach(model => {
                     const option = document.createElement('option');
                     option.value = model.name;
+                    option.textContent = `${model.name} (${(model.size / 1024 / 1024 / 1024).toFixed(1)} GB)`;
                     datalist.appendChild(option);
                 });
-                modelInput.setAttribute('list', datalistId);
 
-                // Add note showing available models
-                const modelNames = models.map(m => m.name).join(', ');
-                const existingNote = modelInput.parentElement.querySelector('.model-hint');
-                if (!existingNote) {
-                    const note = document.createElement('p');
-                    note.className = 'model-hint';
-                    note.style.cssText = 'font-size:10px;color:#10b981;margin-top:4px;';
-                    note.innerHTML = `<i class="fas fa-check-circle"></i> Installed: ${modelNames.substring(0, 80)}${modelNames.length > 80 ? '...' : ''}`;
-                    modelInput.parentElement.appendChild(note);
+                inputElement.setAttribute('list', datalistId);
+
+                // Update or add the model list display
+                let modelListDiv = document.getElementById('ollama-model-list');
+                if (!modelListDiv) {
+                    modelListDiv = document.createElement('div');
+                    modelListDiv.id = 'ollama-model-list';
+                    modelListDiv.style.cssText = 'font-size:10px;color:#10b981;margin-top:4px;';
+                    inputElement.parentElement.appendChild(modelListDiv);
                 }
+
+                const modelNames = models.map(m => m.name).join(', ');
+                modelListDiv.innerHTML = `<i class="fas fa-check-circle"></i> Installed: ${modelNames.substring(0, 100)}${modelNames.length > 100 ? '...' : ''}`;
             }
         }
     } catch (error) {
-        console.log('Could not fetch Ollama models:', error);
-    }
-};
-
-// Override handleProviderChange to include model dropdown update
-const originalHandleProviderChange = app.handleProviderChange;
-app.handleProviderChange = function () {
-    originalHandleProviderChange.call(this);
-    this.updateModelDropdown();
-
-    // Fetch Ollama models if local provider
-    if (this.ai.provider === 'local') {
-        setTimeout(() => this.fetchOllamaModels(), 500);
-    }
-};
-
-// Override toggleSettings to update dropdown when modal opens
-const originalToggleSettings = app.toggleSettings;
-app.toggleSettings = function () {
-    originalToggleSettings.call(this);
-    setTimeout(() => {
-        this.updateModelDropdown();
-        if (this.ai.provider === 'local') {
-            this.fetchOllamaModels();
+        // Ollama not running - show helpful message
+        let statusDiv = document.getElementById('ollama-status');
+        if (!statusDiv && inputElement.parentElement) {
+            statusDiv = document.createElement('div');
+            statusDiv.id = 'ollama-status';
+            statusDiv.style.cssText = 'font-size:10px;color:#f59e0b;margin-top:4px;';
+            inputElement.parentElement.appendChild(statusDiv);
         }
-    }, 100);
+        if (statusDiv) {
+            statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ollama not reachable. Make sure it\'s running on your computer.';
+        }
+    }
 };
