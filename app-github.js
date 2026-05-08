@@ -6,12 +6,21 @@
 app.showGitHubModal = function () {
     const modal = document.getElementById('github-modal');
     if (modal) modal.classList.remove('hidden');
-    if (this.github.token) {
-        const tokenInput = document.getElementById('github-token');
-        if (tokenInput) tokenInput.value = this.github.token;
-        const repoInput = document.getElementById('github-repo');
-        if (repoInput) repoInput.value = this.github.repo || '';
+
+    // Clear previous values from the modal
+    const tokenInput = document.getElementById('github-token');
+    const repoInput = document.getElementById('github-repo');
+
+    if (tokenInput) {
+        tokenInput.value = this.github.token || '';
     }
+    if (repoInput) {
+        repoInput.value = this.github.repo || '';
+    }
+
+    // Reset any error messages
+    const errorDiv = document.getElementById('github-error');
+    if (errorDiv) errorDiv.remove();
 };
 
 app.connectGitHub = async function () {
