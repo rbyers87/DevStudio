@@ -14,7 +14,8 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
-            enableRemoteModule: true
+            enableRemoteModule: true,
+            focusable: true
         },
         title: 'DevStudio Desktop',
         icon: path.join(__dirname, 'icon.png'),
