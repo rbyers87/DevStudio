@@ -397,11 +397,12 @@ app.openPreviewInNewTab = function () {
     }
 };
 
-app.createCheckpoint = function () {
+// Find this in app-files.js (around line 200-220)
+app.createCheckpoint = function (customMessage = null) {
     const checkpoint = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
-        message: `Checkpoint ${this.versions.length + 1}`,
+        message: customMessage || `Checkpoint ${this.versions.length + 1}`,
         files: JSON.parse(JSON.stringify(this.files))
     };
 
@@ -413,7 +414,7 @@ app.createCheckpoint = function () {
 
     this.saveToStorage();
     this.renderVersions();
-    this.showToast('Checkpoint saved!');
+    this.showToast(customMessage || 'Checkpoint saved!');
     this.refreshLayout();
 };
 
