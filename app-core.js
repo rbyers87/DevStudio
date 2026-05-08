@@ -547,6 +547,43 @@ Respond with ONLY the JSON object.`;
         this.showToast('Pushing files to GitHub...');
         await this.deployToGitHub();
 
+        // ============================================================
+        // STEP 5: AUTO-LOAD THE REPO (THIS IS THE NEW PART)
+        // ============================================================
+        this.showToast('Loading repository from GitHub...');
+
+        // Clear current files and versions (they already have the same content, but we want to load from GitHub)
+        this.files = {};
+        this.versions = [];
+
+        const [owner, repoName] = this.github.repo.split('/');
+
+        try {
+            await this.fetchGitHubContents(owner, repoName, '');
+            this.currentFolder = '';
+            this.saveToStorage();
+            this.updateFolderSelector();
+            this.renderFileTree();
+
+            // Create checkpoint for the loaded repo
+            this.createCheckpoint(`GitHub Import: ${this.github.repo} - ${new Date().toLocaleString()}`);
+
+            // Open the main HTML file if exists
+            const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
+            if (firstHtml) {
+                this.openFile(firstHtml);
+            } else if (Object.keys(this.files).length > 0) {
+                const firstFile = Object.keys(this.files).find(f => this.files[f].type === 'file');
+                if (firstFile) this.openFile(firstFile);
+            }
+
+            this.showToast(`✅ Repository loaded! ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files ready.`);
+
+        } catch (error) {
+            console.error('Error loading repo:', error);
+            this.showToast('Warning: Repo created but could not auto-load. Click GitHub button to load manually.');
+        }
+
         if (typeof this.addChatMessage === 'function') {
             this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${name}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
         }
