@@ -52,20 +52,133 @@ app.initElectronFeatures = function () {
         if (fs) this.fs = fs;
         if (path) this.path = path;
 
-        // Add "Open Folder" button to header
+        // Add "New Project" button to header (replaces Open Folder)
         const headerButtons = document.querySelector('.header .flex.items-center.gap-3:last-child');
-        if (headerButtons && !document.getElementById('open-folder-btn')) {
-            const openFolderBtn = document.createElement('button');
-            openFolderBtn.id = 'open-folder-btn';
-            openFolderBtn.onclick = () => this.openLocalFolder();
-            openFolderBtn.style.cssText = 'padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px;';
-            openFolderBtn.innerHTML = '<i class="fas fa-folder-open"></i>Open Folder';
-            headerButtons.insertBefore(openFolderBtn, headerButtons.firstChild);
+        if (headerButtons && !document.getElementById('new-project-btn')) {
+            const newProjectBtn = document.createElement('button');
+            newProjectBtn.id = 'new-project-btn';
+            newProjectBtn.onclick = () => this.showNewProjectDialog();
+            newProjectBtn.style.cssText = 'padding: 6px 14px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 8px;';
+            newProjectBtn.innerHTML = '<i class="fas fa-plus-circle"></i>New Project';
+            headerButtons.insertBefore(newProjectBtn, headerButtons.firstChild);
         }
 
         console.log('Electron features initialized');
     } catch (error) {
         console.error('Failed to initialize Electron features:', error);
+    }
+};
+
+// Show New Project dialog
+app.showNewProjectDialog = function () {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('new-project-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'new-project-modal';
+        modal.className = 'modal hidden';
+        modal.innerHTML = `
+            <div class="modal-box" style="max-width: 500px;">
+                <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-plus-circle" style="color: #10b981;"></i>
+                    Create New Project
+                </h2>
+                <div class="mb-4">
+                    <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 6px;">
+                        <i class="fas fa-tag mr-1"></i> Project Name
+                    </label>
+                    <input type="text" id="new-project-name" class="input" placeholder="my-awesome-app" autocomplete="off">
+                </div>
+                <div class="mb-4">
+                    <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 6px;">
+                        <i class="fas fa-align-left mr-1"></i> Description
+                    </label>
+                    <textarea id="new-project-desc" class="input" rows="3" placeholder="Describe what you want to build..." style="resize: vertical;"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label style="font-size: 13px; color: #94a3b8; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="new-project-github" style="width: 18px; height: 18px; cursor: pointer;">
+                        <i class="fab fa-github"></i> Create GitHub repository and push
+                    </label>
+                    <p style="font-size: 11px; color: #64748b; margin-top: 6px; margin-left: 26px;">
+                        You'll need to connect GitHub first if not already connected
+                    </p>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button onclick="app.confirmNewProject()" class="btn btn-primary" style="flex: 1;">
+                        <i class="fas fa-rocket mr-1"></i> Create Project
+                    </button>
+                    <button onclick="app.closeModal('new-project-modal')" class="btn btn-secondary" style="flex: 1;">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // Clear previous values
+    const nameInput = document.getElementById('new-project-name');
+    const descInput = document.getElementById('new-project-desc');
+    const githubCheckbox = document.getElementById('new-project-github');
+    if (nameInput) nameInput.value = '';
+    if (descInput) descInput.value = '';
+    if (githubCheckbox) githubCheckbox.checked = false;
+
+    // Show modal
+    modal.classList.remove('hidden');
+
+    // Focus on name input
+    setTimeout(() => {
+        if (nameInput) nameInput.focus();
+    }, 100);
+};
+
+// Confirm and create new project
+app.confirmNewProject = async function () {
+    const projectName = document.getElementById('new-project-name').value.trim();
+    const projectDesc = document.getElementById('new-project-desc').value.trim();
+    const createGithub = document.getElementById('new-project-github').checked;
+
+    if (!projectName) {
+        this.showToast('Please enter a project name');
+        return;
+    }
+
+    if (!projectDesc) {
+        this.showToast('Please describe your project');
+        return;
+    }
+
+    // Close modal
+    this.closeModal('new-project-modal');
+
+    // Show progress in chat
+    this.addChatMessage(`🚀 Starting new project: **${projectName}**`, 'system');
+    this.addChatMessage(`📝 Description: ${projectDesc}`, 'system');
+
+    if (createGithub && !this.github.token) {
+        this.addChatMessage(`⚠️ You need to connect GitHub first. Please click the GitHub button to connect.`, 'ai');
+        return;
+    }
+
+    if (createGithub && this.github.token) {
+        // Create project and push to GitHub
+        const result = await this.createAndPushToGitHub(projectDesc, projectName);
+        if (result) {
+            this.showToast(`✅ Project "${projectName}" created and pushed to GitHub!`);
+        } else {
+            this.showToast(`❌ Failed to create project`);
+        }
+    } else {
+        // Just create the project locally
+        const result = await this.initNewProject(projectDesc, projectName);
+        if (result) {
+            this.showToast(`✅ Project "${projectName}" created!`);
+            this.addChatMessage(`✅ Project "${projectName}" has been created. You can now start coding!`, 'ai');
+        } else {
+            this.showToast(`❌ Failed to create project`);
+        }
     }
 };
 
