@@ -383,6 +383,28 @@ Provide a clear, well-structured explanation.`;
     return await this.callAIWithSystemPrompt(context, 'You are a helpful coding teacher. Provide clear explanations.');
 };
 
+// Fix chat input focus
+app.fixChatInput = function () {
+    const chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        // Remove any disabled attributes
+        chatInput.removeAttribute('disabled');
+        chatInput.removeAttribute('readonly');
+        // Ensure it's focusable
+        chatInput.style.pointerEvents = 'auto';
+        chatInput.style.opacity = '1';
+        chatInput.tabIndex = 0;
+
+        // Force focus on click
+        chatInput.onclick = (e) => {
+            e.stopPropagation();
+            chatInput.focus();
+        };
+
+        console.log('Chat input fixed');
+    }
+};
+
 // FIX BUGS
 app.fixBugs = async function (intent) {
     let fileName = intent.target_file;

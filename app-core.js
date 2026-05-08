@@ -140,6 +140,13 @@ const app = {
 
         this.showToast('DevStudio Ready!');
         setTimeout(() => this.testOllamaConnection(), 500);
+
+        // Fix chat input focus
+        setTimeout(() => {
+            if (typeof this.fixChatInput === 'function') {
+                this.fixChatInput();
+            }
+        }, 100);
     },
 
     setupEventListeners() {
