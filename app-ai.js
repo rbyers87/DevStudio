@@ -30,6 +30,13 @@ app.saveSettingsAndClose = function () {
         this.settings.fontSize = fontSize;
     }
     this.settings.theme = document.getElementById('editor-theme').value;
+
+    // Get model value from either input or select
+    const modelElement = document.getElementById('ai-model');
+    if (modelElement) {
+        this.ai.model = modelElement.value;
+    }
+
     this.saveAISettings();
     this.updateEditorTheme();
     if (this.editor) {
@@ -784,4 +791,171 @@ app.openFile = function (filename) {
     if (filename.endsWith('.html') && typeof this.updatePreview === 'function') {
         this.updatePreview();
     }
+};
+// ============================================================
+// Dynamic Model Dropdown Methods - ADD AT END OF app-ai.js
+// ============================================================
+
+app.updateModelDropdown = function () {
+    const provider = document.getElementById('ai-provider').value;
+    const modelContainer = document.getElementById('ai-model-container');
+
+    if (!modelContainer) return;
+
+    const config = this.providers[provider];
+    if (!config) return;
+
+    // Store current value
+    const currentModelInput = document.getElementById('ai-model');
+    const currentValue = currentModelInput ? currentModelInput.value : this.ai.model;
+
+    // Clear container
+    modelContainer.innerHTML = '';
+
+    if (provider === 'local') {
+        // Local Ollama - text input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = 'ai-model';
+        input.className = 'input mt-1';
+        input.value = currentValue || config.defaultModel;
+        input.placeholder = 'gemma4:latest, codellama, llama3, mistral';
+        modelContainer.appendChild(input);
+
+        const note = document.createElement('p');
+        note.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;';
+        note.innerHTML = '<i class="fas fa-info-circle"></i> Use exact model name from `ollama list`';
+        modelContainer.appendChild(note);
+    } else {
+        // Cloud providers - dropdown
+        const select = document.createElement('select');
+        select.id = 'ai-model';
+        select.className = 'input mt-1';
+
+        config.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            if (currentValue === model || (!currentValue && model === config.defaultModel)) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+
+        const customOption = document.createElement('option');
+        customOption.value = '__custom__';
+        customOption.textContent = '🔧 Enter custom model...';
+        select.appendChild(customOption);
+
+        modelContainer.appendChild(select);
+
+        select.onchange = () => {
+            if (select.value === '__custom__') {
+                const customInput = document.createElement('input');
+                customInput.type = 'text';
+                customInput.id = 'ai-model';
+                customInput.className = 'input mt-1';
+                customInput.placeholder = 'Enter custom model name...';
+                customInput.value = '';
+                modelContainer.innerHTML = '';
+                modelContainer.appendChild(customInput);
+
+                const backBtn = document.createElement('button');
+                backBtn.type = 'button';
+                backBtn.textContent = '← Back to dropdown';
+                backBtn.style.cssText = 'margin-top:8px;padding:4px 8px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;cursor:pointer;font-size:11px;';
+                backBtn.onclick = () => {
+                    this.updateModelDropdown();
+                    const restoredSelect = document.getElementById('ai-model');
+                    if (restoredSelect && restoredSelect.tagName === 'SELECT') {
+                        restoredSelect.value = this.ai.model || config.defaultModel;
+                    }
+                };
+                modelContainer.appendChild(backBtn);
+                customInput.focus();
+            }
+        };
+
+        const note = document.createElement('p');
+        note.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;';
+        note.innerHTML = config.help;
+        modelContainer.appendChild(note);
+    }
+
+    // Save model when changed
+    const newModelInput = document.getElementById('ai-model');
+    if (newModelInput) {
+        newModelInput.addEventListener('change', () => {
+            this.ai.model = newModelInput.value;
+        });
+    }
+};
+
+app.fetchOllamaModels = async function () {
+    if (this.ai.provider !== 'local') return;
+
+    try {
+        const endpoint = this.ai.endpoint || 'http://localhost:11434';
+        const response = await fetch(`${endpoint}/api/tags`);
+        if (response.ok) {
+            const data = await response.json();
+            const models = data.models || [];
+            const modelInput = document.getElementById('ai-model');
+
+            if (models.length > 0 && modelInput && modelInput.tagName === 'INPUT') {
+                // Add datalist for autocomplete
+                const datalistId = 'ollama-models-datalist';
+                let datalist = document.getElementById(datalistId);
+                if (!datalist) {
+                    datalist = document.createElement('datalist');
+                    datalist.id = datalistId;
+                    document.body.appendChild(datalist);
+                }
+                datalist.innerHTML = '';
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.name;
+                    datalist.appendChild(option);
+                });
+                modelInput.setAttribute('list', datalistId);
+
+                // Add note showing available models
+                const modelNames = models.map(m => m.name).join(', ');
+                const existingNote = modelInput.parentElement.querySelector('.model-hint');
+                if (!existingNote) {
+                    const note = document.createElement('p');
+                    note.className = 'model-hint';
+                    note.style.cssText = 'font-size:10px;color:#10b981;margin-top:4px;';
+                    note.innerHTML = `<i class="fas fa-check-circle"></i> Installed: ${modelNames.substring(0, 80)}${modelNames.length > 80 ? '...' : ''}`;
+                    modelInput.parentElement.appendChild(note);
+                }
+            }
+        }
+    } catch (error) {
+        console.log('Could not fetch Ollama models:', error);
+    }
+};
+
+// Override handleProviderChange to include model dropdown update
+const originalHandleProviderChange = app.handleProviderChange;
+app.handleProviderChange = function () {
+    originalHandleProviderChange.call(this);
+    this.updateModelDropdown();
+
+    // Fetch Ollama models if local provider
+    if (this.ai.provider === 'local') {
+        setTimeout(() => this.fetchOllamaModels(), 500);
+    }
+};
+
+// Override toggleSettings to update dropdown when modal opens
+const originalToggleSettings = app.toggleSettings;
+app.toggleSettings = function () {
+    originalToggleSettings.call(this);
+    setTimeout(() => {
+        this.updateModelDropdown();
+        if (this.ai.provider === 'local') {
+            this.fetchOllamaModels();
+        }
+    }, 100);
 };

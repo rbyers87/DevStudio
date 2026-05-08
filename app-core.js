@@ -26,20 +26,21 @@ const app = {
     localOllamaModels: null,
 
     // Provider configurations
+    // Replace from line ~30 to ~80
     providers: {
         openai: {
             name: 'OpenAI',
             baseUrl: 'https://api.openai.com/v1/chat/completions',
-            models: ['gpt-4', 'gpt-4-turbo-preview', 'gpt-3.5-turbo'],
-            defaultModel: 'gpt-4',
-            help: 'Get API key from platform.openai.com',
+            models: ['gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo'],
+            defaultModel: 'gpt-4-turbo-preview',
+            help: 'Get API key from platform.openai.com/api-keys',
             needsKey: true
         },
         anthropic: {
             name: 'Anthropic',
             baseUrl: 'https://api.anthropic.com/v1/messages',
             models: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
-            defaultModel: 'claude-3-opus-20240229',
+            defaultModel: 'claude-3-sonnet-20240229',
             help: 'Get API key from console.anthropic.com',
             needsKey: true
         },
@@ -47,7 +48,7 @@ const app = {
             name: 'Google Gemini',
             baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
             models: ['gemini-2.0-flash-exp', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'],
-            defaultModel: 'gemini-2.0-flash-exp',
+            defaultModel: 'gemini-1.5-flash',
             help: 'Get API key from aistudio.google.com',
             needsKey: true
         },
@@ -61,20 +62,20 @@ const app = {
             cors: true
         },
         kimi: {
-            name: 'Kimi',
+            name: 'Kimi (Moonshot)',
             baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
             models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
             defaultModel: 'moonshot-v1-8k',
-            help: 'FREE tier but may have CORS issues',
+            help: 'FREE tier - get key from platform.moonshot.cn',
             needsKey: true,
             cors: true
         },
         local: {
             name: 'Local Ollama',
             baseUrl: 'http://localhost:11434/api/generate',
-            models: ['gemma4:latest', 'codellama:latest', 'llama3:latest', 'mistral:latest'],
+            models: [],
             defaultModel: 'gemma4:latest',
-            help: 'Run `ollama serve` first, then pull model with `ollama pull gemma4:latest`',
+            help: 'Run `ollama serve` then `ollama pull gemma4:latest`',
             needsKey: false
         }
     },
