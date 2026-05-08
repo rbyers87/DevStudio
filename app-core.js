@@ -400,6 +400,147 @@ const app = {
         }
     },
 
+    // ============================================================
+    // NEW PROJECT FROM CHAT & GITHUB REPO CREATION
+    // Add this entire block to app-core.js before the final }
+    // ============================================================
+
+    app.initNewProject = async function (projectDescription, projectName) {
+        this.showToast(`Creating project: ${projectName}...`);
+
+        const systemPrompt = `You are a full-stack developer. Create a complete web application project based on the user's description.
+
+Project name: ${projectName}
+Description: ${projectDescription}
+
+Generate a complete project structure with appropriate files (HTML, CSS, JS, etc.).
+Return a JSON object in this exact format:
+{
+  "files": {
+    "path/to/file1.html": "file content",
+    "path/to/file2.css": "file content",
+    "path/to/file3.js": "file content"
+  }
+}
+
+Make sure the project is functional, well-structured, and includes an index.html as the entry point.
+Respond with ONLY the JSON object.`;
+
+        try {
+            const response = await this.callAIWithSystemPrompt(systemPrompt, 'You are a project generator. Output only valid JSON.');
+
+            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error('Invalid AI response format');
+
+            const projectData = JSON.parse(jsonMatch[0]);
+
+            this.files = {};
+
+            for (const [filePath, content] of Object.entries(projectData.files)) {
+                const parts = filePath.split('/');
+                if (parts.length > 1) {
+                    let currentPath = '';
+                    for (let i = 0; i < parts.length - 1; i++) {
+                        currentPath = currentPath ? currentPath + parts[i] + '/' : parts[i] + '/';
+                        if (!this.files[currentPath]) {
+                            this.files[currentPath] = { content: null, type: 'folder' };
+                        }
+                    }
+                }
+                this.files[filePath] = { content: content, type: 'file' };
+            }
+
+            this.saveToStorage();
+            this.updateFolderSelector();
+            this.renderFileTree();
+            this.createCheckpoint(`Initial project: ${projectName}`);
+
+            const indexPath = Object.keys(projectData.files).find(f => f.toLowerCase().includes('index.html'));
+            if (indexPath) {
+                this.openFile(indexPath);
+            }
+
+            this.showToast(`✅ Project "${projectName}" created with ${Object.keys(projectData.files).length} files!`);
+            return true;
+
+        } catch (error) {
+            console.error('Project creation error:', error);
+            this.showToast(`Error creating project: ${error.message}`);
+            return false;
+        }
+    };
+
+    app.createGitHubRepo = async function (repoName, description = '', isPrivate = false) {
+        if (!this.github.token) {
+            this.showToast('Please connect to GitHub first');
+            return null;
+        }
+
+        try {
+            const response = await fetch('https://api.github.com/user/repos', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${this.github.token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: repoName,
+                    description: description,
+                    private: isPrivate,
+                    auto_init: false
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to create repo');
+            }
+
+            const repo = await response.json();
+            this.github.repo = `${repo.owner.login}/${repo.name}`;
+            this.saveToStorage();
+
+            const statusSpan = document.getElementById('github-status');
+            if (statusSpan) statusSpan.innerHTML = `<i class="fab fa-github"></i> ${this.github.repo}`;
+
+            this.showToast(`✅ Repository created: ${this.github.repo}`);
+            return repo;
+
+        } catch (error) {
+            console.error('Repo creation error:', error);
+            this.showToast(`Error creating repo: ${error.message}`);
+            return null;
+        }
+    };
+
+    app.createAndPushToGitHub = async function (projectDescription, projectName, repoDescription = '') {
+        // Step 1: Create the project
+        const projectCreated = await this.initNewProject(projectDescription, projectName);
+        if (!projectCreated) return false;
+
+        // Step 2: Check if connected to GitHub
+        if (!this.github.token) {
+            const shouldConnect = confirm('Project created! Would you like to connect to GitHub to push this project?');
+            if (shouldConnect) {
+                this.showGitHubModal();
+                return false;
+            }
+            return true;
+        }
+
+        // Step 3: Create GitHub repo
+        const repo = await this.createGitHubRepo(projectName, repoDescription || projectDescription, false);
+        if (!repo) return false;
+
+        // Step 4: Push files to GitHub
+        this.showToast('Pushing files to GitHub...');
+        await this.deployToGitHub();
+
+        this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${projectName}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
+
+        return true;
+    };
+
     initDemoFiles() {
         this.files = {
             'index.html': {

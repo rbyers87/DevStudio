@@ -155,9 +155,10 @@ app.sendMessage = async function () {
             case 'optimize_code':
                 response = await this.optimizeCode(intent);
                 break;
-            case 'general_chat':
-                response = await this.generalChat(message);
+            case 'create_project':
+                response = await this.handleCreateProject(intent);
                 break;
+            case 'general_chat':
             default:
                 response = await this.generalChat(message);
         }
@@ -185,17 +186,24 @@ Available actions:
 - "explain_code": User wants explanation of code
 - "fix_bugs": User wants bug fixes
 - "optimize_code": User wants code optimization
+- "create_project": User wants to create a NEW PROJECT from scratch (e.g., "create a todo app", "build a calculator", "make a portfolio site")
 - "general_chat": General conversation or question
+
+For "create_project", look for phrases like:
+- "create a new project"
+- "build an app called..."
+- "make a website that..."
+- "start a new [type] project"
+- "generate a [type] app"
 
 Respond with ONLY a JSON object in this exact format:
 {
   "action": "action_name",
+  "project_name": "project name" (if create_project),
+  "project_description": "description" (if create_project),
   "target_file": "filename.ext" (if applicable, otherwise null),
   "description": "brief description of what user wants"
 }
-
-If user specifies a filename (e.g., "create test.html", "update style.css"), extract it.
-If user says "this file" or "current file", use "${this.currentFile || 'current file'}".
 
 User message: ${userMessage}
 
@@ -214,7 +222,6 @@ Respond with ONLY the JSON.`;
         console.error('Intent parsing failed:', e);
     }
 
-    // Default fallback
     return { action: 'general_chat', target_file: null, description: userMessage };
 };
 
@@ -465,8 +472,49 @@ First, explain your optimizations. Then provide the complete optimized code in a
     return response;
 };
 
+// HANDLE CREATE PROJECT
+app.handleCreateProject = async function (intent) {
+    const projectName = intent.project_name || 'new-project';
+    const projectDescription = intent.project_description || intent.description;
+
+    // Confirm with user
+    const confirmMsg = `I'll create a new project: "${projectName}"\n\nDescription: ${projectDescription}\n\nDo you want me to also create a GitHub repository and push it? (I'll ask for GitHub connection if needed)`;
+
+    this.addChatMessage(confirmMsg, 'ai');
+
+    // Wait for user confirmation (store intent for later)
+    this.pendingProject = {
+        name: projectName,
+        description: projectDescription,
+        action: 'create_project'
+    };
+
+    return `Would you like me to proceed with creating this project? Reply with "yes" to continue, or tell me what to change.`;
+};
+
+
 // GENERAL CHAT
 app.generalChat = async function (message) {
+    // Check for pending project confirmation
+    if (this.pendingProject && this.pendingProject.action === 'create_project') {
+        const lowerMsg = message.toLowerCase();
+        if (lowerMsg.includes('yes') || lowerMsg.includes('yeah') || lowerMsg.includes('sure') || lowerMsg.includes('ok') || lowerMsg.includes('proceed')) {
+            this.pendingProject = null;
+            const result = await this.createAndPushToGitHub(
+                this.pendingProject?.description || message,
+                this.pendingProject?.name || 'my-project'
+            );
+            if (result) {
+                return `✅ Project creation complete! Check the sidebar for your files.`;
+            } else {
+                return `❌ There was an error creating the project. Please check the console for details.`;
+            }
+        } else {
+            this.pendingProject = null;
+            return `OK, I won't create the project. Let me know if you'd like to modify the description or try a different project idea.`;
+        }
+    }
+
     const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
     const fileName = this.currentFile || 'none';
     const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
