@@ -45,6 +45,12 @@
                 <span id="active-provider" class="provider-badge badge-local" style="display:inline-flex;">Ollama</span>
             </div>
             <div class="flex items-center gap-3">
+                <button onclick="app.openEditorSearch()"
+                    style="padding:6px 12px;background:#334155;color:#e2e8f0;border:none;border-radius:8px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;"
+                    title="Search in file (Ctrl+F)">
+                    <i class="fas fa-search"></i>
+                    <span class="hidden sm:inline">Find</span>
+                </button>
                 <button onclick="app.toggleSettings()"
                     style="padding:8px 12px;background:transparent;border:none;cursor:pointer;color:#94a3b8;border-radius:8px;"
                     onmouseover="this.style.background='#334155'" onmouseout="this.style.background='transparent'"><i
@@ -85,6 +91,25 @@
                                     class="fas fa-sync-alt" style="font-size:11px;"></i></button>
                         </div>
                     </div>
+
+                    <!-- File Search Section -->
+                    <div class="search-section" style="margin-bottom: 12px;">
+                        <div class="file-search-container">
+                            <div style="position: relative;">
+                                <i class="fas fa-search"
+                                    style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #64748b;"></i>
+                                <input type="text" id="file-search-input" placeholder="Search files..."
+                                    style="width: 100%; padding: 8px 8px 8px 32px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0; font-size: 13px;"
+                                    oninput="app.filterFileTree(this.value)">
+                                <button onclick="app.clearFileSearch()"
+                                    style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: transparent; border: none; color: #64748b; cursor: pointer; display: none;"
+                                    id="clear-search-btn">
+                                    <i class="fas fa-times" style="font-size: 11px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="folder-selector">
                         <label><i class="fas fa-folder-open mr-1"></i> Current Folder</label>
                         <select id="folder-select" onchange="app.changeFolder(this.value)"></select>
@@ -109,6 +134,37 @@
 
         <section class="editor-section">
             <div class="tabs-bar" id="tabs-container"></div>
+
+            <!-- Editor Search Bar -->
+            <div class="editor-search-bar" id="editor-search-bar"
+                style="display: none; padding: 8px 12px; background: #1e293b; border-bottom: 1px solid #334155; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <div style="display: flex; gap: 8px; align-items: center; flex: 1;">
+                    <i class="fas fa-search" style="color: #64748b; font-size: 12px;"></i>
+                    <input type="text" id="editor-search-input" placeholder="Find..."
+                        style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 13px; width: 200px;"
+                        onkeyup="app.performEditorSearch()">
+                    <input type="text" id="editor-replace-input" placeholder="Replace with..."
+                        style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 13px; width: 200px; display: none;">
+                    <div style="display: flex; gap: 4px;">
+                        <button onclick="app.findNext()" class="search-nav-btn" title="Find Next (F3)"><i
+                                class="fas fa-arrow-down"></i></button>
+                        <button onclick="app.findPrevious()" class="search-nav-btn" title="Find Previous (Shift+F3)"><i
+                                class="fas fa-arrow-up"></i></button>
+                        <button onclick="app.toggleReplaceMode()" id="replace-toggle-btn" class="search-nav-btn"
+                            title="Replace Mode (Ctrl+H)"><i class="fas fa-exchange-alt"></i></button>
+                        <button onclick="app.closeEditorSearch()" class="search-nav-btn" title="Close (Escape)"><i
+                                class="fas fa-times"></i></button>
+                    </div>
+                </div>
+                <div id="replace-controls" style="display: none; gap: 8px; align-items: center;">
+                    <button onclick="app.replaceCurrent()" class="btn btn-secondary"
+                        style="padding: 4px 12px; font-size: 12px;">Replace</button>
+                    <button onclick="app.replaceAll()" class="btn btn-primary"
+                        style="padding: 4px 12px; font-size: 12px;">Replace All</button>
+                </div>
+                <div id="search-stats" style="font-size: 11px; color: #64748b;"></div>
+            </div>
+
             <div class="editor-container">
                 <div id="monaco-editor"></div>
                 <textarea id="fallback-editor"
@@ -154,8 +210,7 @@
                     <div style="display:flex;gap:10px;margin-bottom:12px;">
                         <input type="text" id="chat-input" class="input"
                             placeholder="Ask me to modify code, explain, or generate something..."
-                            onkeypress="if(event.key==='Enter') app.sendMessage()" autocomplete="off" autofocus="off"
-                            style="pointer-events: auto; opacity: 1; z-index: 100;">
+                            onkeypress="if(event.key==='Enter') app.sendMessage()">
                         <button onclick="app.sendMessage()" class="btn btn-primary px-5"><i class="fas fa-paper-plane"
                                 style="font-size:13px;"></i></button>
                     </div>
@@ -247,9 +302,10 @@
             <div class="mb-4">
                 <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-cube mr-1"></i> Model
                     Name</label>
-                <div id="ai-model-container">
-                    <!-- Dynamic content will be inserted here -->
-                </div>
+                <input type="text" id="ai-model" class="input mt-1" value="gemma4:latest"
+                    placeholder="gemma4:latest, codellama, llama3, mistral">
+                <p style="font-size:11px;color:#64748b;margin-top:6px;">For Ollama: use exact model name from `ollama
+                    list`</p>
             </div>
             <div class="mb-4" id="local-endpoint-container">
                 <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-network-wired mr-1"></i>

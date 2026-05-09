@@ -835,3 +835,79 @@ button:disabled {
 .chat-panel * {
     pointer-events: auto;
 }
+
+/* ── Search Features ──────────────────────────────────────── */
+.search-section {
+    margin-bottom: 12px;
+}
+
+.search-nav-btn {
+    background: #334155;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: #e2e8f0;
+    transition: all 0.2s;
+}
+
+.search-nav-btn:hover {
+    background: #3b82f6;
+}
+
+.editor-search-bar {
+    flex-shrink: 0;
+}
+
+#editor-search-input:focus,
+#editor-replace-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+}
+
+.file-search-highlight {
+    background: #3b82f6;
+    color: white;
+    border-radius: 4px;
+    padding: 0 2px;
+}
+
+.file-search-match {
+    background: #3b82f6;
+    color: white;
+    border-radius: 4px;
+}
+
+.tree-item.search-highlight {
+    background: #3b82f6;
+    color: white;
+    animation: pulse 1s ease;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+        background: #2563eb;
+    }
+}
+
+.search-info {
+    font-size: 11px;
+    color: #64748b;
+    padding: 4px 8px;
+}
+
+/* Search results in Monaco editor */
+.monaco-editor .find-match {
+    background-color: rgba(59, 130, 246, 0.3);
+}
+
+.monaco-editor .current-find-match {
+    background-color: rgba(59, 130, 246, 0.6);
+}

@@ -1,6 +1,6 @@
 // ============================================================
 // DevStudio – app-files.js
-// File tree, tabs, folder management
+// File tree, tabs, folder management, and SEARCH
 // ============================================================
 
 app.updateFolderSelector = function () {
@@ -121,6 +121,7 @@ app.renderFileTree = function () {
     items.forEach(item => {
         const div = document.createElement('div');
         div.className = `tree-item ${this.currentFile === item.path ? 'active' : ''}`;
+        div.dataset.path = item.path;
 
         const isFolder = item.type === 'folder';
         const name = isFolder
@@ -153,7 +154,7 @@ app.renderFileTree = function () {
 
         div.innerHTML = `<span class="chevron" style="visibility: ${isFolder ? 'visible' : 'hidden'};"></span>
                        <i class="fas ${iconClass} icon" style="color: ${iconColor};"></i>
-                       <span class="name">${name}</span>`;
+                       <span class="name">${this.escapeHtml(name)}</span>`;
 
         if (isFolder) {
             div.onclick = (e) => {
@@ -174,7 +175,19 @@ app.renderFileTree = function () {
         container.appendChild(emptyDiv);
     }
 
+    // Re-apply search filter if there is an active search
+    const searchInput = document.getElementById('file-search-input');
+    if (searchInput && searchInput.value.trim()) {
+        this.filterFileTree(searchInput.value);
+    }
+
     this.refreshLayout();
+};
+
+app.escapeHtml = function (text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 };
 
 app.renderTabs = function () {
@@ -211,7 +224,6 @@ app.renderTabs = function () {
     this.refreshLayout();
 };
 
-// FIX: Updated openFile with layout refresh
 app.openFile = function (filename) {
     if (this.files[filename]?.type === 'folder') return;
 
@@ -234,7 +246,6 @@ app.openFile = function (filename) {
             }, 50);
         } catch (e) {
             console.error('Monaco error:', e);
-            // Fallback to textarea if Monaco fails
             const fallbackEditor = document.getElementById('fallback-editor');
             if (fallbackEditor) {
                 fallbackEditor.value = content;
@@ -249,7 +260,6 @@ app.openFile = function (filename) {
         this.updatePreview();
     }
 
-    // FIX: Refresh layout to ensure chat stays visible
     setTimeout(() => {
         if (typeof this.refreshLayout === 'function') {
             this.refreshLayout();
@@ -397,12 +407,11 @@ app.openPreviewInNewTab = function () {
     }
 };
 
-// Find this in app-files.js (around line 200-220)
-app.createCheckpoint = function (customMessage = null) {
+app.createCheckpoint = function () {
     const checkpoint = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
-        message: customMessage || `Checkpoint ${this.versions.length + 1}`,
+        message: `Checkpoint ${this.versions.length + 1}`,
         files: JSON.parse(JSON.stringify(this.files))
     };
 
@@ -414,7 +423,7 @@ app.createCheckpoint = function (customMessage = null) {
 
     this.saveToStorage();
     this.renderVersions();
-    this.showToast(customMessage || 'Checkpoint saved!');
+    this.showToast('Checkpoint saved!');
     this.refreshLayout();
 };
 
@@ -492,4 +501,397 @@ app.clearAllData = function () {
         this.showToast('Data cleared. Reloading...');
         setTimeout(() => location.reload(), 1500);
     }
+};
+
+// ============================================================
+// FILE EXPLORER SEARCH
+// ============================================================
+
+app.filterFileTree = function (searchTerm) {
+    const clearBtn = document.getElementById('clear-search-btn');
+    const term = searchTerm.trim().toLowerCase();
+
+    if (term === '') {
+        if (clearBtn) clearBtn.style.display = 'none';
+        this.clearFileSearch();
+        return;
+    }
+
+    if (clearBtn) clearBtn.style.display = 'block';
+    this.currentFileSearchTerm = term;
+
+    const allItems = document.querySelectorAll('.tree-item');
+    let matchCount = 0;
+
+    allItems.forEach(item => {
+        const fileName = item.querySelector('.name')?.textContent || '';
+        const filePath = item.dataset.path || '';
+        const matches = fileName.toLowerCase().includes(term) || filePath.toLowerCase().includes(term);
+
+        if (matches) {
+            matchCount++;
+            item.style.display = 'flex';
+            item.classList.add('search-highlight');
+            if (matchCount === 1) {
+                setTimeout(() => item.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+            }
+        } else {
+            item.style.display = 'none';
+            item.classList.remove('search-highlight');
+        }
+    });
+
+    this.showSearchStats(matchCount, allItems.length);
+};
+
+app.clearFileSearch = function () {
+    const searchInput = document.getElementById('file-search-input');
+    const clearBtn = document.getElementById('clear-search-btn');
+
+    if (searchInput) searchInput.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+
+    const allItems = document.querySelectorAll('.tree-item');
+    allItems.forEach(item => {
+        item.style.display = 'flex';
+        item.classList.remove('search-highlight');
+    });
+
+    const statsDiv = document.getElementById('file-search-stats');
+    if (statsDiv) statsDiv.remove();
+
+    this.currentFileSearchTerm = '';
+};
+
+app.showSearchStats = function (matches, total) {
+    const oldStats = document.getElementById('file-search-stats');
+    if (oldStats) oldStats.remove();
+
+    const searchSection = document.querySelector('.search-section');
+    if (searchSection && matches > 0) {
+        const statsDiv = document.createElement('div');
+        statsDiv.id = 'file-search-stats';
+        statsDiv.className = 'search-info';
+        statsDiv.innerHTML = `<i class="fas fa-list mr-1"></i>Found ${matches} of ${total} files matching "${this.currentFileSearchTerm}"`;
+        searchSection.appendChild(statsDiv);
+    }
+};
+
+// ============================================================
+// EDITOR SEARCH (Find/Replace)
+// ============================================================
+
+app.openEditorSearch = function () {
+    const searchBar = document.getElementById('editor-search-bar');
+    if (!searchBar) return;
+
+    searchBar.style.display = 'flex';
+    const searchInput = document.getElementById('editor-search-input');
+    if (searchInput) {
+        searchInput.focus();
+        searchInput.select();
+    }
+
+    if (!this.useFallbackEditor && this.editor) {
+        const selection = this.editor.getSelection();
+        const selectedText = this.editor.getModel().getValueInRange(selection);
+        if (selectedText && selectedText.trim()) {
+            searchInput.value = selectedText;
+            this.performEditorSearch();
+        }
+    }
+};
+
+app.closeEditorSearch = function () {
+    const searchBar = document.getElementById('editor-search-bar');
+    if (searchBar) searchBar.style.display = 'none';
+
+    if (!this.useFallbackEditor && this.editor) {
+        this.editor.getModel().findMatches('', false, false, false, null, true);
+    }
+};
+
+app.toggleReplaceMode = function () {
+    const replaceInput = document.getElementById('editor-replace-input');
+    const replaceControls = document.getElementById('replace-controls');
+    const toggleBtn = document.getElementById('replace-toggle-btn');
+
+    if (!replaceInput || !replaceControls) return;
+
+    const isVisible = replaceInput.style.display !== 'none';
+
+    if (isVisible) {
+        replaceInput.style.display = 'none';
+        replaceControls.style.display = 'none';
+        if (toggleBtn) toggleBtn.style.opacity = '0.6';
+    } else {
+        replaceInput.style.display = 'block';
+        replaceControls.style.display = 'flex';
+        if (toggleBtn) toggleBtn.style.opacity = '1';
+        replaceInput.focus();
+    }
+};
+
+app.performEditorSearch = function () {
+    if (this.useFallbackEditor) {
+        this.performFallbackEditorSearch();
+        return;
+    }
+
+    if (!this.editor) return;
+
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const isCaseSensitive = false;
+    const isRegex = false;
+
+    if (!searchTerm) {
+        this.editor.getModel().findMatches('', false, false, false, null, true);
+        document.getElementById('search-stats').innerHTML = '';
+        return;
+    }
+
+    const matches = this.editor.getModel().findMatches(searchTerm, false, isRegex, isCaseSensitive, null, true);
+
+    const statsDiv = document.getElementById('search-stats');
+    if (statsDiv && matches.length > 0) {
+        statsDiv.innerHTML = `${matches.length} match${matches.length !== 1 ? 'es' : ''}`;
+    } else if (statsDiv) {
+        statsDiv.innerHTML = 'No matches';
+    }
+
+    if (matches.length > 0) {
+        this.editor.setSelection(matches[0].range);
+        this.editor.revealRangeInCenter(matches[0].range);
+        this.currentMatchIndex = 0;
+        this.searchMatches = matches;
+    } else {
+        this.searchMatches = [];
+        this.currentMatchIndex = -1;
+    }
+};
+
+app.findNext = function () {
+    if (this.useFallbackEditor) {
+        this.findNextFallback();
+        return;
+    }
+
+    if (!this.searchMatches || this.searchMatches.length === 0) {
+        this.performEditorSearch();
+        return;
+    }
+
+    this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches.length;
+    const match = this.searchMatches[this.currentMatchIndex];
+
+    if (match) {
+        this.editor.setSelection(match.range);
+        this.editor.revealRangeInCenter(match.range);
+        this.updateSearchStats();
+    }
+};
+
+app.findPrevious = function () {
+    if (this.useFallbackEditor) {
+        this.findPreviousFallback();
+        return;
+    }
+
+    if (!this.searchMatches || this.searchMatches.length === 0) {
+        this.performEditorSearch();
+        return;
+    }
+
+    this.currentMatchIndex = (this.currentMatchIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
+    const match = this.searchMatches[this.currentMatchIndex];
+
+    if (match) {
+        this.editor.setSelection(match.range);
+        this.editor.revealRangeInCenter(match.range);
+        this.updateSearchStats();
+    }
+};
+
+app.updateSearchStats = function () {
+    const statsDiv = document.getElementById('search-stats');
+    if (statsDiv && this.searchMatches && this.searchMatches.length > 0) {
+        statsDiv.innerHTML = `${this.currentMatchIndex + 1} of ${this.searchMatches.length} matches`;
+    }
+};
+
+app.replaceCurrent = function () {
+    if (this.useFallbackEditor) {
+        this.replaceCurrentFallback();
+        return;
+    }
+
+    if (!this.editor || !this.searchMatches || this.searchMatches.length === 0) return;
+
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+    const currentMatch = this.searchMatches[this.currentMatchIndex];
+
+    if (currentMatch) {
+        const range = currentMatch.range;
+        this.editor.executeEdits('replace', [{
+            range: range,
+            text: replaceTerm,
+            forceMoveMarkers: true
+        }]);
+
+        this.performEditorSearch();
+    }
+};
+
+app.replaceAll = function () {
+    if (this.useFallbackEditor) {
+        this.replaceAllFallback();
+        return;
+    }
+
+    if (!this.editor) return;
+
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+
+    if (!searchTerm) return;
+
+    const content = this.editor.getValue();
+    const newContent = content.split(searchTerm).join(replaceTerm);
+
+    this.editor.setValue(newContent);
+    if (this.currentFile && this.files[this.currentFile]) {
+        this.files[this.currentFile].content = newContent;
+        this.saveToStorage();
+    }
+    this.showToast(`Replaced all occurrences of "${searchTerm}"`);
+    this.performEditorSearch();
+};
+
+// Fallback for textarea editor
+app.performFallbackEditorSearch = function () {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+
+    if (!textarea || !searchTerm) return;
+
+    const content = textarea.value;
+    const matches = this.findStringIndices(content, searchTerm);
+
+    const statsDiv = document.getElementById('search-stats');
+    if (statsDiv) {
+        statsDiv.innerHTML = `${matches.length} match${matches.length !== 1 ? 'es' : ''}`;
+    }
+
+    this.fallbackMatches = matches;
+    this.currentFallbackMatch = matches.length > 0 ? 0 : -1;
+
+    if (matches.length > 0) {
+        this.highlightFallbackMatch(0);
+    }
+};
+
+app.findStringIndices = function (str, search) {
+    const indices = [];
+    let index = -1;
+    while ((index = str.indexOf(search, index + 1)) !== -1) {
+        indices.push(index);
+    }
+    return indices;
+};
+
+app.highlightFallbackMatch = function (matchIndex) {
+    const textarea = document.getElementById('fallback-editor');
+    if (!textarea || !this.fallbackMatches || this.fallbackMatches.length === 0) return;
+
+    const start = this.fallbackMatches[matchIndex];
+    const end = start + (document.getElementById('editor-search-input')?.value?.length || 0);
+
+    textarea.focus();
+    textarea.setSelectionRange(start, end);
+
+    this.updateSearchStats();
+};
+
+app.findNextFallback = function () {
+    if (!this.fallbackMatches || this.fallbackMatches.length === 0) {
+        this.performFallbackEditorSearch();
+        return;
+    }
+
+    this.currentFallbackMatch = (this.currentFallbackMatch + 1) % this.fallbackMatches.length;
+    this.highlightFallbackMatch(this.currentFallbackMatch);
+};
+
+app.findPreviousFallback = function () {
+    if (!this.fallbackMatches || this.fallbackMatches.length === 0) {
+        this.performFallbackEditorSearch();
+        return;
+    }
+
+    this.currentFallbackMatch = (this.currentFallbackMatch - 1 + this.fallbackMatches.length) % this.fallbackMatches.length;
+    this.highlightFallbackMatch(this.currentFallbackMatch);
+};
+
+app.replaceCurrentFallback = function () {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+
+    if (!textarea || !searchTerm) return;
+
+    const content = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+
+    if (selectedText === searchTerm) {
+        const newContent = content.substring(0, start) + replaceTerm + content.substring(end);
+        textarea.value = newContent;
+
+        if (this.currentFile && this.files[this.currentFile]) {
+            this.files[this.currentFile].content = newContent;
+            this.saveToStorage();
+        }
+
+        this.performFallbackEditorSearch();
+    }
+};
+
+app.replaceAllFallback = function () {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+
+    if (!textarea || !searchTerm) return;
+
+    const newContent = textarea.value.split(searchTerm).join(replaceTerm);
+    textarea.value = newContent;
+
+    if (this.currentFile && this.files[this.currentFile]) {
+        this.files[this.currentFile].content = newContent;
+        this.saveToStorage();
+    }
+
+    this.showToast(`Replaced all occurrences of "${searchTerm}"`);
+    this.performFallbackEditorSearch();
+};
+
+app.getLanguage = function (filename) {
+    const ext = filename.split('.').pop();
+    const map = {
+        'js': 'javascript',
+        'ts': 'typescript',
+        'html': 'html',
+        'htm': 'html',
+        'css': 'css',
+        'json': 'json',
+        'py': 'python',
+        'md': 'markdown',
+        'jsx': 'javascript',
+        'tsx': 'typescript',
+        'xml': 'xml',
+        'svg': 'xml',
+        'txt': 'plaintext'
+    };
+    return map[ext] || 'plaintext';
 };
