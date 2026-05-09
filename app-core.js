@@ -157,6 +157,7 @@ const app = {
         });
 
         window.addEventListener('keydown', (e) => {
+            // Save shortcut (Ctrl+S / Cmd+S)
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
                 if (window.isElectron && this.currentProjectPath) {
@@ -164,6 +165,48 @@ const app = {
                 } else {
                     this.saveToStorage();
                     this.showToast('Project saved to local storage');
+                }
+            }
+
+            // ============================================================
+            // SEARCH KEYBOARD SHORTCUTS - ADD THIS BLOCK
+            // ============================================================
+
+            // Ctrl+F / Cmd+F - Open search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                if (typeof this.openEditorSearch === 'function') {
+                    this.openEditorSearch();
+                }
+            }
+
+            // Ctrl+H / Cmd+H - Replace mode
+            if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+                e.preventDefault();
+                if (typeof this.openEditorSearch === 'function') {
+                    this.openEditorSearch();
+                    if (typeof this.toggleReplaceMode === 'function') {
+                        this.toggleReplaceMode();
+                    }
+                }
+            }
+
+            // F3 - Find next
+            if (e.key === 'F3') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    if (typeof this.findPrevious === 'function') this.findPrevious();
+                } else {
+                    if (typeof this.findNext === 'function') this.findNext();
+                }
+            }
+
+            // Escape - Close search
+            if (e.key === 'Escape') {
+                const searchBar = document.getElementById('editor-search-bar');
+                if (searchBar && searchBar.style.display === 'flex') {
+                    e.preventDefault();
+                    if (typeof this.closeEditorSearch === 'function') this.closeEditorSearch();
                 }
             }
         });
