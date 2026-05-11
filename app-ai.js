@@ -1,49 +1,121 @@
 // ============================================================
 // DevStudio – app-ai.js
 // INTELLIGENT VERSION - AI understands intent, no pattern matching
+// FIXED: Settings persistence for Electron
 // ============================================================
 
 app.saveAISettings = function () {
+    // Get all AI settings from the form
     const provider = document.getElementById('ai-provider').value;
+    const apiKey = document.getElementById('ai-api-key').value.trim();
+    const model = document.getElementById('ai-model').value.trim();
+    const endpoint = document.getElementById('ai-endpoint').value.trim();
+    const autoApply = document.getElementById('ai-auto-apply').checked;
+    
+    // Save to app.ai object
     this.ai = {
         provider: provider,
-        apiKey: document.getElementById('ai-api-key').value.trim(),
-        model: document.getElementById('ai-model').value.trim(),
-        endpoint: document.getElementById('ai-endpoint').value.trim(),
-        autoApply: document.getElementById('ai-auto-apply').checked
+        apiKey: apiKey,
+        model: model,
+        endpoint: endpoint,
+        autoApply: autoApply
     };
-
+    
+    // Set defaults for local provider if needed
     if (this.ai.provider === 'local' && !this.ai.model) {
         this.ai.model = 'gemma4:latest';
     }
     if (this.ai.provider === 'local' && !this.ai.endpoint) {
         this.ai.endpoint = 'http://localhost:11434';
     }
-
-    this.saveToStorage();
+    
+    // Update UI badge to show active provider
     this.updateProviderUI();
+    
+    // Save to storage (saveToStorage will be called separately by saveSettingsAndClose)
+    console.log('AI Settings saved:', {
+        provider: this.ai.provider,
+        model: this.ai.model,
+        autoApply: this.ai.autoApply
+    });
 };
 
 app.saveSettingsAndClose = function () {
+    // ============================================================
+    // SAVE EDITOR SETTINGS
+    // ============================================================
+    
+    // Save font size
     const fontSize = parseInt(document.getElementById('editor-font-size').value);
     if (fontSize >= 10 && fontSize <= 24) {
         this.settings.fontSize = fontSize;
     }
-    this.settings.theme = document.getElementById('editor-theme').value;
-
-    // Get model value from either input or select
-    const modelElement = document.getElementById('ai-model');
-    if (modelElement) {
-        this.ai.model = modelElement.value;
-    }
-
+    
+    // Save theme
+    const theme = document.getElementById('editor-theme').value;
+    this.settings.theme = theme;
+    
+    // ============================================================
+    // SAVE AI SETTINGS (saves provider, apiKey, model, endpoint, autoApply)
+    // ============================================================
     this.saveAISettings();
+    
+    // ============================================================
+    // APPLY SETTINGS TO EDITOR
+    // ============================================================
+    
+    // Apply theme to editor
     this.updateEditorTheme();
-    if (this.editor) {
+    
+    // Apply font size to editor
+    if (this.editor && !this.useFallbackEditor) {
         this.editor.updateOptions({ fontSize: this.settings.fontSize });
+    } else if (this.useFallbackEditor) {
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            fallbackEditor.style.fontSize = this.settings.fontSize + 'px';
+        }
     }
+    
+    // ============================================================
+    // FORCE SAVE TO STORAGE (saves EVERYTHING)
+    // ============================================================
+    this.saveToStorage();
+    
+    // ============================================================
+    // CLOSE MODAL AND SHOW CONFIRMATION
+    // ============================================================
     this.closeModal('settings-modal');
-    this.showToast('Settings saved successfully!');
+    this.showToast('All settings saved successfully!');
+    
+    // For Electron, force reapply theme (Monaco loads differently in Electron)
+    if (window.isElectron && this.editor && !this.useFallbackEditor) {
+        setTimeout(() => {
+            try {
+                if (typeof monaco !== 'undefined' && monaco.editor) {
+                    monaco.editor.setTheme(this.settings.theme);
+                    console.log('Theme reapplied for Electron:', this.settings.theme);
+                } else if (this.editor.updateOptions) {
+                    this.editor.updateOptions({ theme: this.settings.theme });
+                }
+            } catch (e) {
+                console.error('Failed to reapply theme:', e);
+            }
+        }, 100);
+    }
+    
+    // For web version, also ensure theme is applied
+    if (!window.isElectron && this.editor && !this.useFallbackEditor) {
+        setTimeout(() => {
+            try {
+                if (typeof monaco !== 'undefined' && monaco.editor) {
+                    monaco.editor.setTheme(this.settings.theme);
+                }
+            } catch (e) {
+                console.error('Failed to reapply theme:', e);
+            }
+        }, 50);
+    }
 };
 
 app.testOllamaConnection = async function () {
@@ -155,10 +227,9 @@ app.sendMessage = async function () {
             case 'optimize_code':
                 response = await this.optimizeCode(intent);
                 break;
-            case 'create_project':
-                response = await this.handleCreateProject(intent);
-                break;
             case 'general_chat':
+                response = await this.generalChat(message);
+                break;
             default:
                 response = await this.generalChat(message);
         }
@@ -186,24 +257,17 @@ Available actions:
 - "explain_code": User wants explanation of code
 - "fix_bugs": User wants bug fixes
 - "optimize_code": User wants code optimization
-- "create_project": User wants to create a NEW PROJECT from scratch (e.g., "create a todo app", "build a calculator", "make a portfolio site")
 - "general_chat": General conversation or question
-
-For "create_project", look for phrases like:
-- "create a new project"
-- "build an app called..."
-- "make a website that..."
-- "start a new [type] project"
-- "generate a [type] app"
 
 Respond with ONLY a JSON object in this exact format:
 {
   "action": "action_name",
-  "project_name": "project name" (if create_project),
-  "project_description": "description" (if create_project),
   "target_file": "filename.ext" (if applicable, otherwise null),
   "description": "brief description of what user wants"
 }
+
+If user specifies a filename (e.g., "create test.html", "update style.css"), extract it.
+If user says "this file" or "current file", use "${this.currentFile || 'current file'}".
 
 User message: ${userMessage}
 
@@ -222,6 +286,7 @@ Respond with ONLY the JSON.`;
         console.error('Intent parsing failed:', e);
     }
 
+    // Default fallback
     return { action: 'general_chat', target_file: null, description: userMessage };
 };
 
@@ -383,28 +448,6 @@ Provide a clear, well-structured explanation.`;
     return await this.callAIWithSystemPrompt(context, 'You are a helpful coding teacher. Provide clear explanations.');
 };
 
-// Fix chat input focus
-app.fixChatInput = function () {
-    const chatInput = document.getElementById('chat-input');
-    if (chatInput) {
-        // Remove any disabled attributes
-        chatInput.removeAttribute('disabled');
-        chatInput.removeAttribute('readonly');
-        // Ensure it's focusable
-        chatInput.style.pointerEvents = 'auto';
-        chatInput.style.opacity = '1';
-        chatInput.tabIndex = 0;
-
-        // Force focus on click
-        chatInput.onclick = (e) => {
-            e.stopPropagation();
-            chatInput.focus();
-        };
-
-        console.log('Chat input fixed');
-    }
-};
-
 // FIX BUGS
 app.fixBugs = async function (intent) {
     let fileName = intent.target_file;
@@ -494,49 +537,8 @@ First, explain your optimizations. Then provide the complete optimized code in a
     return response;
 };
 
-// HANDLE CREATE PROJECT
-app.handleCreateProject = async function (intent) {
-    const projectName = intent.project_name || 'new-project';
-    const projectDescription = intent.project_description || intent.description;
-
-    // Confirm with user
-    const confirmMsg = `I'll create a new project: "${projectName}"\n\nDescription: ${projectDescription}\n\nDo you want me to also create a GitHub repository and push it? (I'll ask for GitHub connection if needed)`;
-
-    this.addChatMessage(confirmMsg, 'ai');
-
-    // Wait for user confirmation (store intent for later)
-    this.pendingProject = {
-        name: projectName,
-        description: projectDescription,
-        action: 'create_project'
-    };
-
-    return `Would you like me to proceed with creating this project? Reply with "yes" to continue, or tell me what to change.`;
-};
-
-
 // GENERAL CHAT
 app.generalChat = async function (message) {
-    // Check for pending project confirmation
-    if (this.pendingProject && this.pendingProject.action === 'create_project') {
-        const lowerMsg = message.toLowerCase();
-        if (lowerMsg.includes('yes') || lowerMsg.includes('yeah') || lowerMsg.includes('sure') || lowerMsg.includes('ok') || lowerMsg.includes('proceed')) {
-            const projectName = this.pendingProject.name;
-            const projectDescription = this.pendingProject.description;
-            // Clear pending BEFORE calling to avoid re-entry
-            this.pendingProject = null;
-            const result = await this.createAndPushToGitHub(projectDescription, projectName);
-            if (result) {
-                return `✅ Project creation complete! Check the sidebar for your files.`;
-            } else {
-                return `❌ There was an error creating the project. Please check the console for details.`;
-            }
-        } else {
-            this.pendingProject = null;
-            return `OK, I won't create the project. Let me know if you'd like to modify the description or try a different project idea.`;
-        }
-    }
-
     const currentCode = this.currentFile ? (this.files[this.currentFile]?.content || '') : '';
     const fileName = this.currentFile || 'none';
     const fileExt = fileName !== 'none' ? fileName.split('.').pop() : 'txt';
@@ -712,13 +714,33 @@ app.toggleChat = function () {
 app.toggleSettings = function () {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.remove('hidden');
-    document.getElementById('ai-provider').value = this.ai.provider;
-    document.getElementById('ai-api-key').value = this.ai.apiKey;
-    document.getElementById('ai-model').value = this.ai.model;
-    document.getElementById('ai-endpoint').value = this.ai.endpoint;
-    document.getElementById('editor-theme').value = this.settings.theme;
-    document.getElementById('editor-font-size').value = this.settings.fontSize;
-    document.getElementById('ai-auto-apply').checked = this.ai.autoApply || false;
+    
+    // Set current values from saved settings
+    const providerSelect = document.getElementById('ai-provider');
+    const apiKeyInput = document.getElementById('ai-api-key');
+    const modelInput = document.getElementById('ai-model');
+    const endpointInput = document.getElementById('ai-endpoint');
+    const themeSelect = document.getElementById('editor-theme');
+    const fontSizeInput = document.getElementById('editor-font-size');
+    const autoApplyCheckbox = document.getElementById('ai-auto-apply');
+    
+    if (providerSelect) providerSelect.value = this.ai.provider;
+    if (apiKeyInput) apiKeyInput.value = this.ai.apiKey || '';
+    if (modelInput) modelInput.value = this.ai.model || '';
+    if (endpointInput) endpointInput.value = this.ai.endpoint || '';
+    if (themeSelect) themeSelect.value = this.settings.theme;
+    if (fontSizeInput) fontSizeInput.value = this.settings.fontSize;
+    if (autoApplyCheckbox) autoApplyCheckbox.checked = this.ai.autoApply || false;
+    
+    // Log current settings for debugging
+    console.log('Settings modal opened - Current settings:', {
+        theme: this.settings.theme,
+        fontSize: this.settings.fontSize,
+        aiProvider: this.ai.provider,
+        aiModel: this.ai.model,
+        autoApply: this.ai.autoApply
+    });
+    
     this.updateProviderHelp();
     this.handleProviderChange();
 };
@@ -734,41 +756,36 @@ app.updateProviderHelp = function () {
 };
 
 app.updateEditorTheme = function () {
-    this.settings.theme = document.getElementById('editor-theme').value;
-    if (this.editor) {
-        monaco.editor.setTheme(this.settings.theme);
+    const themeSelect = document.getElementById('editor-theme');
+    if (themeSelect) {
+        this.settings.theme = themeSelect.value;
     }
-    this.saveToStorage();
-};
-
-app.saveToStorage = function () {
-    const data = {
-        files: this.files,
-        versions: this.versions,
-        github: this.github,
-        ai: this.ai,
-        settings: this.settings,
-        expandedFolders: Array.from(this.expandedFolders),
-        currentFolder: this.currentFolder,
-        currentFile: this.currentFile
-    };
-    localStorage.setItem('devstudio_data', JSON.stringify(data));
-};
-
-app.showToast = function (message, duration = 3000) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${message}`;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-};
-
-app.closeModal = function (id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.add('hidden');
+    
+    // Apply theme to Monaco editor
+    if (this.editor && !this.useFallbackEditor) {
+        try {
+            if (typeof monaco !== 'undefined' && monaco.editor) {
+                monaco.editor.setTheme(this.settings.theme);
+                console.log('Theme changed to:', this.settings.theme);
+            } else if (this.editor.updateOptions) {
+                this.editor.updateOptions({ theme: this.settings.theme });
+            }
+        } catch (error) {
+            console.error('Error changing theme:', error);
+        }
+    } else if (this.useFallbackEditor) {
+        // Update fallback editor theme
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            if (this.settings.theme === 'vs-dark' || this.settings.theme === 'hc-black') {
+                fallbackEditor.style.background = '#1e1e1e';
+                fallbackEditor.style.color = '#d4d4d4';
+            } else {
+                fallbackEditor.style.background = '#ffffff';
+                fallbackEditor.style.color = '#000000';
+            }
+        }
+    }
 };
 
 app.updateProviderUI = function () {
@@ -783,239 +800,46 @@ app.updateProviderUI = function () {
     if (badge) {
         badge.className = `provider-badge ${badgeClass}`;
         badge.textContent = provider === 'local' ? 'Ollama' : this.providers[provider]?.name || provider;
+        badge.style.display = 'inline-flex';
     }
 };
 
 app.handleProviderChange = function () {
     const provider = document.getElementById('ai-provider').value;
     const config = this.providers[provider];
+    const modelInput = document.getElementById('ai-model');
     const endpointContainer = document.getElementById('local-endpoint-container');
-    const apiKeyContainer = document.getElementById('api-key-container');
 
-    // Update model dropdown - THIS SHOULD NOW WORK CORRECTLY
-    this.updateModelDropdown();
-
-    // Handle endpoint visibility (only for local/Ollama)
     if (provider === 'local' && endpointContainer) {
         endpointContainer.style.display = 'block';
+        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
     } else if (endpointContainer) {
         endpointContainer.style.display = 'none';
+        if (modelInput && config) modelInput.placeholder = config.models[0];
     }
 
-    // Handle API key visibility (hide for local)
-    if (apiKeyContainer) {
-        if (provider === 'local') {
-            apiKeyContainer.style.display = 'none';
-        } else {
-            apiKeyContainer.style.display = 'block';
-        }
-    }
-
-    // Update help text
     const helpText = document.getElementById('provider-help');
-    if (helpText && config) {
-        if (provider === 'local') {
-            helpText.innerHTML = '<i class="fas fa-check-circle"></i> Local Ollama - No API key needed! Make sure Ollama is running on your computer.';
-        } else {
-            helpText.textContent = config.help;
-        }
-    }
-
-    // Update API key hint
-    const hint = document.getElementById('api-key-hint');
-    if (hint) {
-        if (provider === 'local') {
-            hint.innerHTML = '<i class="fas fa-check-circle"></i> ✨ No API key needed - runs locally on your machine!';
-            hint.style.color = '#10b981';
-        } else if (provider === 'kimi') {
-            hint.innerHTML = '<i class="fas fa-info-circle"></i> Kimi: FREE credits but may have CORS issues. Get key from platform.moonshot.cn';
-            hint.style.color = '#fbbf24';
-        } else if (provider === 'deepseek') {
-            hint.innerHTML = '<i class="fas fa-info-circle"></i> Deepseek: Paid API. Get key from platform.deepseek.com';
-            hint.style.color = '#f87171';
-        } else {
-            hint.innerHTML = `<i class="fas fa-info-circle"></i> Enter your API key for ${config.name}. Get it from their platform.`;
-            hint.style.color = '#64748b';
-        }
-    }
-
-    // Update CORS warning
+    if (helpText && config) helpText.textContent = config.help;
+    
     const corsWarning = document.getElementById('cors-warning');
     if (corsWarning) {
         corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
     }
-};
 
-// ============================================================
-// Dynamic Model Dropdown Methods - ADD AT END OF app-ai.js
-// ============================================================
-
-app.updateModelDropdown = function () {
-    const provider = document.getElementById('ai-provider').value;
-    const modelContainer = document.getElementById('ai-model-container');
-
-    if (!modelContainer) return;
-
-    const config = this.providers[provider];
-    if (!config) return;
-
-    // Store current value
-    const currentModelInput = document.getElementById('ai-model');
-    const currentValue = currentModelInput ? currentModelInput.value : this.ai.model;
-
-    // Clear container
-    modelContainer.innerHTML = '';
-
-    // FIX: Check for 'local' provider specifically
-    if (provider === 'local') {
-        // Local Ollama - text input (NOT a dropdown)
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.id = 'ai-model';
-        input.className = 'input mt-1';
-        input.value = currentValue || this.ai.model || config.defaultModel || 'gemma4:latest';
-        input.placeholder = 'gemma4:latest, codellama, llama3, mistral, phi3, etc.';
-        modelContainer.appendChild(input);
-
-        // Add note about ollama list command
-        const note = document.createElement('p');
-        note.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;';
-        note.innerHTML = '<i class="fas fa-terminal"></i> Run `ollama list` in terminal to see installed models';
-        modelContainer.appendChild(note);
-
-        // Add save listener
-        input.addEventListener('change', () => {
-            this.ai.model = input.value;
-        });
-
-        // Try to fetch and show installed models as suggestions
-        this.fetchOllamaModelsForInput(input);
-    } else {
-        // Cloud providers - dropdown
-        const select = document.createElement('select');
-        select.id = 'ai-model';
-        select.className = 'input mt-1';
-
-        // Add models from config
-        if (config.models && config.models.length > 0) {
-            config.models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model;
-                option.textContent = model;
-                if (currentValue === model || (!currentValue && model === config.defaultModel)) {
-                    option.selected = true;
-                }
-                select.appendChild(option);
-            });
-        }
-
-        // Add custom option
-        const customOption = document.createElement('option');
-        customOption.value = '__custom__';
-        customOption.textContent = '🔧 Enter custom model...';
-        select.appendChild(customOption);
-
-        modelContainer.appendChild(select);
-
-        select.onchange = () => {
-            if (select.value === '__custom__') {
-                const customInput = document.createElement('input');
-                customInput.type = 'text';
-                customInput.id = 'ai-model';
-                customInput.className = 'input mt-1';
-                customInput.placeholder = 'Enter custom model name...';
-                customInput.value = '';
-                modelContainer.innerHTML = '';
-                modelContainer.appendChild(customInput);
-
-                const backBtn = document.createElement('button');
-                backBtn.type = 'button';
-                backBtn.textContent = '← Back to dropdown';
-                backBtn.style.cssText = 'margin-top:8px;padding:4px 8px;background:#334155;border:none;border-radius:6px;color:#e2e8f0;cursor:pointer;font-size:11px;';
-                backBtn.onclick = () => {
-                    this.updateModelDropdown();
-                    const restoredSelect = document.getElementById('ai-model');
-                    if (restoredSelect && restoredSelect.tagName === 'SELECT') {
-                        restoredSelect.value = this.ai.model || config.defaultModel;
-                    }
-                };
-                modelContainer.appendChild(backBtn);
-                customInput.focus();
-
-                customInput.addEventListener('change', () => {
-                    this.ai.model = customInput.value;
-                });
-            } else {
-                this.ai.model = select.value;
-            }
-        };
-
-        const note = document.createElement('p');
-        note.style.cssText = 'font-size:11px;color:#64748b;margin-top:6px;';
-        note.innerHTML = config.help;
-        modelContainer.appendChild(note);
-    }
-};
-
-// Add this new helper method for Ollama
-app.fetchOllamaModelsForInput = async function (inputElement) {
-    if (!inputElement) return;
-
-    try {
-        const endpoint = this.ai.endpoint || 'http://localhost:11434';
-        const response = await fetch(`${endpoint}/api/tags`, {
-            method: 'GET',
-            signal: AbortSignal.timeout(2000)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            const models = data.models || [];
-
-            if (models.length > 0) {
-                // Create datalist for autocomplete
-                const datalistId = 'ollama-models-datalist';
-                let datalist = document.getElementById(datalistId);
-                if (!datalist) {
-                    datalist = document.createElement('datalist');
-                    datalist.id = datalistId;
-                    document.body.appendChild(datalist);
-                }
-                datalist.innerHTML = '';
-
-                models.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.name;
-                    option.textContent = `${model.name} (${(model.size / 1024 / 1024 / 1024).toFixed(1)} GB)`;
-                    datalist.appendChild(option);
-                });
-
-                inputElement.setAttribute('list', datalistId);
-
-                // Update or add the model list display
-                let modelListDiv = document.getElementById('ollama-model-list');
-                if (!modelListDiv) {
-                    modelListDiv = document.createElement('div');
-                    modelListDiv.id = 'ollama-model-list';
-                    modelListDiv.style.cssText = 'font-size:10px;color:#10b981;margin-top:4px;';
-                    inputElement.parentElement.appendChild(modelListDiv);
-                }
-
-                const modelNames = models.map(m => m.name).join(', ');
-                modelListDiv.innerHTML = `<i class="fas fa-check-circle"></i> Installed: ${modelNames.substring(0, 100)}${modelNames.length > 100 ? '...' : ''}`;
-            }
-        }
-    } catch (error) {
-        // Ollama not running - show helpful message
-        let statusDiv = document.getElementById('ollama-status');
-        if (!statusDiv && inputElement.parentElement) {
-            statusDiv = document.createElement('div');
-            statusDiv.id = 'ollama-status';
-            statusDiv.style.cssText = 'font-size:10px;color:#f59e0b;margin-top:4px;';
-            inputElement.parentElement.appendChild(statusDiv);
-        }
-        if (statusDiv) {
-            statusDiv.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Ollama not reachable. Make sure it\'s running on your computer.';
+    const hint = document.getElementById('api-key-hint');
+    if (hint) {
+        if (provider === 'kimi') {
+            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
+            hint.style.color = '#fbbf24';
+        } else if (provider === 'deepseek') {
+            hint.textContent = 'Deepseek: Requires paid credits';
+            hint.style.color = '#f87171';
+        } else if (provider === 'local') {
+            hint.textContent = '✨ No API key needed - runs locally on your machine!';
+            hint.style.color = '#10b981';
+        } else {
+            hint.textContent = 'Enter your API key for the selected provider';
+            hint.style.color = '#64748b';
         }
     }
 };
