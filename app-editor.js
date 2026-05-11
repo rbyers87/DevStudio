@@ -166,11 +166,46 @@ app.setEditorContent = function (content) {
 };
 
 app.updateEditorTheme = function () {
-    this.settings.theme = document.getElementById('editor-theme').value;
-    if (this.editor && !this.useFallbackEditor) {
-        monaco.editor.setTheme(this.settings.theme);
+    const themeSelect = document.getElementById('editor-theme');
+    if (themeSelect) {
+        this.settings.theme = themeSelect.value;
     }
+    
+    // Save to storage immediately
     this.saveToStorage();
+    
+    // Apply theme to Monaco editor
+    if (this.editor && !this.useFallbackEditor) {
+        try {
+            // Check if monaco is available
+            if (typeof monaco !== 'undefined' && monaco.editor) {
+                monaco.editor.setTheme(this.settings.theme);
+                console.log('Theme changed to:', this.settings.theme);
+            } else {
+                console.warn('Monaco editor not available for theme change');
+            }
+        } catch (error) {
+            console.error('Error changing theme:', error);
+            // Fallback for Electron
+            if (this.editor.updateOptions) {
+                this.editor.updateOptions({ theme: this.settings.theme });
+            }
+        }
+    } else if (this.useFallbackEditor) {
+        // Update fallback editor theme
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            if (this.settings.theme === 'vs-dark' || this.settings.theme === 'hc-black') {
+                fallbackEditor.style.background = '#1e1e1e';
+                fallbackEditor.style.color = '#d4d4d4';
+            } else {
+                fallbackEditor.style.background = '#ffffff';
+                fallbackEditor.style.color = '#000000';
+            }
+        }
+    }
+    
+    this.showToast(`Theme changed to ${this.settings.theme}`);
 };
 
 app.getLanguage = function (filename) {
