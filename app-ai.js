@@ -8,7 +8,32 @@ app.saveAISettings = function () {
     // Get all AI settings from the form
     const provider = document.getElementById('ai-provider').value;
     const apiKey = document.getElementById('ai-api-key').value.trim();
-    const model = document.getElementById('ai-model').value.trim();
+    
+    // Get model from either select or text input
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    let model = '';
+    
+    if (provider === 'local') {
+        // For Ollama, check if dropdown is visible and get value
+        if (modelSelect && modelSelect.style.display !== 'none') {
+            model = modelSelect.value;
+            // Skip the refresh option if selected
+            if (model === '__REFRESH__') {
+                model = this.ai.model || '';
+            }
+        } else if (modelText && modelText.style.display !== 'none') {
+            model = modelText.value.trim();
+        }
+    } else {
+        // For cloud providers
+        if (modelSelect && modelSelect.style.display !== 'none') {
+            model = modelSelect.value;
+        } else if (modelText && modelText.style.display !== 'none') {
+            model = modelText.value.trim();
+        }
+    }
+    
     const endpoint = document.getElementById('ai-endpoint').value.trim();
     const autoApply = document.getElementById('ai-auto-apply').checked;
     
@@ -32,7 +57,6 @@ app.saveAISettings = function () {
     // Update UI badge to show active provider
     this.updateProviderUI();
     
-    // Save to storage (saveToStorage will be called separately by saveSettingsAndClose)
     console.log('AI Settings saved:', {
         provider: this.ai.provider,
         model: this.ai.model,
@@ -166,6 +190,120 @@ app.showOllamaNotRunningMessage = function () {
     );
 
     this.showToast('⚠️ Ollama not running - check chat for setup instructions', 5000);
+};
+
+// ============================================================
+// ADD THESE NEW METHODS HERE
+// ============================================================
+
+app.fetchOllamaModels = async function () {
+    if (this.ai.provider !== 'local') return [];
+    
+    const endpoint = this.ai.endpoint || 'http://localhost:11434';
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`${endpoint}/api/tags`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            const data = await response.json();
+            const models = data.models || [];
+            const modelNames = models.map(m => m.name);
+            console.log('Found Ollama models:', modelNames);
+            return modelNames;
+        } else {
+            console.warn('Failed to fetch Ollama models');
+            return [];
+        }
+    } catch (error) {
+        console.warn('Could not fetch Ollama models:', error.message);
+        return [];
+    }
+};
+
+app.populateOllamaModels = async function () {
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    const modelContainer = document.getElementById('ai-model-container');
+    const refreshBtn = document.getElementById('refresh-models-btn');
+    
+    if (!modelSelect || this.ai.provider !== 'local') return;
+    
+    // Show loading state
+    if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
+        refreshBtn.disabled = true;
+    }
+    
+    const models = await this.fetchOllamaModels();
+    
+    if (models.length > 0) {
+        // Show dropdown for Ollama with installed models
+        modelSelect.style.display = 'block';
+        modelText.style.display = 'none';
+        
+        modelSelect.innerHTML = '<option value="">Select a model...</option>';
+        
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            // Display model name with size info if available
+            let displayName = model;
+            option.textContent = displayName;
+            if (this.ai.model === model) option.selected = true;
+            modelSelect.appendChild(option);
+        });
+        
+        // Add a refresh option at the top
+        const refreshOption = document.createElement('option');
+        refreshOption.value = "__REFRESH__";
+        refreshOption.textContent = "⟳ Refresh model list...";
+        refreshOption.disabled = true;
+        modelSelect.insertBefore(refreshOption, modelSelect.firstChild);
+        
+        // Update help text
+        const helpText = document.getElementById('model-help-text');
+        if (helpText) {
+            helpText.innerHTML = `✓ Found ${models.length} installed model(s). Select from dropdown or <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">click here to refresh</a>.`;
+        }
+        
+        // If no model is selected and there are models, select the first one
+        if (!this.ai.model && models.length > 0) {
+            this.ai.model = models[0];
+            modelSelect.value = models[0];
+        }
+    } else {
+        // Fallback to text input if no models found
+        modelSelect.style.display = 'none';
+        modelText.style.display = 'block';
+        modelText.placeholder = 'gemma4:latest, codellama, llama3, mistral';
+        
+        const helpText = document.getElementById('model-help-text');
+        if (helpText) {
+            helpText.innerHTML = 'No Ollama models found. Make sure Ollama is running and you have installed models. <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">Click here to refresh</a>.';
+        }
+    }
+    
+    if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        refreshBtn.disabled = false;
+    }
+};
+
+app.refreshOllamaModels = async function () {
+    if (this.ai.provider !== 'local') {
+        this.showToast('Switch to Local Ollama provider first');
+        return;
+    }
+    
+    this.showToast('Refreshing Ollama models...');
+    await this.populateOllamaModels();
+    this.showToast('Model list refreshed!');
 };
 
 app.addChatMessage = function (text, sender) {
@@ -715,10 +853,8 @@ app.toggleSettings = function () {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.remove('hidden');
     
-    // Set current values from saved settings
     const providerSelect = document.getElementById('ai-provider');
     const apiKeyInput = document.getElementById('ai-api-key');
-    const modelInput = document.getElementById('ai-model');
     const endpointInput = document.getElementById('ai-endpoint');
     const themeSelect = document.getElementById('editor-theme');
     const fontSizeInput = document.getElementById('editor-font-size');
@@ -726,13 +862,14 @@ app.toggleSettings = function () {
     
     if (providerSelect) providerSelect.value = this.ai.provider;
     if (apiKeyInput) apiKeyInput.value = this.ai.apiKey || '';
-    if (modelInput) modelInput.value = this.ai.model || '';
     if (endpointInput) endpointInput.value = this.ai.endpoint || '';
     if (themeSelect) themeSelect.value = this.settings.theme;
     if (fontSizeInput) fontSizeInput.value = this.settings.fontSize;
     if (autoApplyCheckbox) autoApplyCheckbox.checked = this.ai.autoApply || false;
     
-    // Log current settings for debugging
+    // Trigger provider change to populate models
+    this.handleProviderChange();
+    
     console.log('Settings modal opened - Current settings:', {
         theme: this.settings.theme,
         fontSize: this.settings.fontSize,
@@ -742,7 +879,6 @@ app.toggleSettings = function () {
     });
     
     this.updateProviderHelp();
-    this.handleProviderChange();
 };
 
 app.updateProviderHelp = function () {
@@ -807,15 +943,53 @@ app.updateProviderUI = function () {
 app.handleProviderChange = function () {
     const provider = document.getElementById('ai-provider').value;
     const config = this.providers[provider];
-    const modelInput = document.getElementById('ai-model');
+    const modelContainer = document.getElementById('ai-model-container');
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    const refreshBtnContainer = document.getElementById('model-refresh-container');
     const endpointContainer = document.getElementById('local-endpoint-container');
 
+    // Handle model input type based on provider
+    if (provider === 'local') {
+        // For Ollama, try to fetch installed models
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'block';
+        
+        // Check if Ollama is running and fetch models
+        this.populateOllamaModels();
+    } else if (config && config.models && config.models.length > 0) {
+        // For cloud providers, show dropdown with predefined models
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
+        
+        if (modelSelect) {
+            modelSelect.style.display = 'block';
+            modelSelect.innerHTML = '<option value="">Select a model...</option>';
+            config.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                if (this.ai.model === model) option.selected = true;
+                modelSelect.appendChild(option);
+            });
+        }
+        if (modelText) modelText.style.display = 'none';
+    } else {
+        // Fallback to text input
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
+        if (modelSelect) modelSelect.style.display = 'none';
+        if (modelText) {
+            modelText.style.display = 'block';
+            modelText.value = this.ai.model || config?.defaultModel || '';
+        }
+    }
+
+    // Handle local endpoint visibility
     if (provider === 'local' && endpointContainer) {
         endpointContainer.style.display = 'block';
-        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
     } else if (endpointContainer) {
         endpointContainer.style.display = 'none';
-        if (modelInput && config) modelInput.placeholder = config.models[0];
     }
 
     const helpText = document.getElementById('provider-help');
