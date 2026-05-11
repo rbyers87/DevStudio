@@ -267,20 +267,18 @@
     <!-- Settings Modal -->
     <div id="settings-modal" class="modal hidden">
         <div class="modal-box">
-            <h2
-                style="font-size:22px;font-weight:700;margin-bottom:20px;background:linear-gradient(135deg,#fff,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">
+            <h2 style="font-size:22px;font-weight:700;margin-bottom:20px;background:linear-gradient(135deg,#fff,#94a3b8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">
                 <i class="fas fa-cog mr-2"></i>Settings
             </h2>
             <div class="cors-warning" id="cors-warning" style="display:none;">
-                <strong><i class="fas fa-exclamation-triangle mr-1"></i> CORS Notice:</strong> Some AI providers block
-                browser requests.
+                <strong><i class="fas fa-exclamation-triangle mr-1"></i> CORS Notice:</strong> Some AI providers block browser requests.
                 For Ollama (<strong>recommended</strong>), launch Chrome with:<br>
-                <code
-                    style="background:#000;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;">chrome.exe --user-data-dir="C:\chrome-dev" --disable-web-security</code>
+                <code style="background:#000;padding:4px 8px;border-radius:4px;display:inline-block;margin-top:6px;">chrome.exe --user-data-dir="C:\chrome-dev" --disable-web-security</code>
             </div>
+            
+            <!-- AI Provider Selection -->
             <div class="mb-4">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-brain mr-1"></i> AI
-                    Provider</label>
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-brain mr-1"></i> AI Provider</label>
                 <select id="ai-provider" class="input mt-1" onchange="app.handleProviderChange()">
                     <option value="local" selected>🖥️ Local Ollama (Gemma 4 / Llama 3) - Recommended</option>
                     <option value="openai">🤖 OpenAI (GPT-4/GPT-3.5)</option>
@@ -289,62 +287,84 @@
                     <option value="deepseek">🔍 Deepseek</option>
                     <option value="kimi">📚 Kimi (Moonshot)</option>
                 </select>
-                <p style="font-size:11px;color:#64748b;margin-top:6px;" id="provider-help">Local Ollama runs on your
-                    machine - no API key needed!</p>
+                <p style="font-size:11px;color:#64748b;margin-top:6px;" id="provider-help">Local Ollama runs on your machine - no API key needed!</p>
             </div>
+            
+            <!-- API Key Container -->
             <div class="mb-4" id="api-key-container">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-key mr-1"></i> API
-                    Key</label>
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-key mr-1"></i> API Key</label>
                 <input type="password" id="ai-api-key" class="input mt-1" placeholder="sk-... (leave empty for local)">
-                <p style="font-size:11px;color:#64748b;margin-top:6px;" id="api-key-hint">Not required for Ollama
-                    (local)</p>
+                <p style="font-size:11px;color:#64748b;margin-top:6px;" id="api-key-hint">Not required for Ollama (local)</p>
             </div>
-            <div class="mb-4">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-cube mr-1"></i> Model
-                    Name</label>
-                <input type="text" id="ai-model" class="input mt-1" value="gemma4:latest"
-                    placeholder="gemma4:latest, codellama, llama3, mistral">
-                <p style="font-size:11px;color:#64748b;margin-top:6px;">For Ollama: use exact model name from `ollama
-                    list`</p>
+            
+            <!-- Model Container (updated with refresh button) -->
+            <div class="mb-4" id="ai-model-container">
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;display:flex;align-items:center;justify-content:space-between;">
+                    <span><i class="fas fa-cube mr-1"></i> Model Name</span>
+                    <div id="model-refresh-container" style="display: none;">
+                        <button type="button" id="refresh-models-btn" onclick="app.refreshOllamaModels()" 
+                            style="background:#334155; border:none; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:11px; color:#94a3b8;"
+                            onmouseover="this.style.background='#3b82f6'; this.style.color='white'"
+                            onmouseout="this.style.background='#334155'; this.style.color='#94a3b8'"
+                            title="Refresh installed models">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </label>
+                <select id="ai-model-select" class="input mt-1" style="display: none;">
+                    <option value="">Select a model...</option>
+                </select>
+                <input type="text" id="ai-model-text" class="input mt-1" value="gemma4:latest" placeholder="gemma4:latest, codellama, llama3, mistral" style="display: block;">
+                <p style="font-size:11px;color:#64748b;margin-top:6px;" id="model-help-text">For Ollama: Automatically detects installed models. For other providers, select from dropdown.</p>
             </div>
+            
+            <!-- Local Endpoint Container WITH TEST BUTTON (THIS IS WHERE YOU ADD THE BUTTON) -->
             <div class="mb-4" id="local-endpoint-container">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-network-wired mr-1"></i>
-                    Ollama Endpoint</label>
-                <input type="text" id="ai-endpoint" class="input mt-1" value="http://localhost:11434"
-                    placeholder="http://localhost:11434">
-                <p style="font-size:11px;color:#64748b;margin-top:6px;">Default Ollama port is 11434</p>
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-network-wired mr-1"></i> Ollama Endpoint</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="ai-endpoint" class="input mt-1" value="http://localhost:11434" placeholder="http://localhost:11434" style="flex:1;">
+                    <button onclick="app.testOllamaConnection()" class="btn btn-secondary mt-1" style="padding:8px 16px; white-space:nowrap;">
+                        <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                </div>
+                <p style="font-size:11px;color:#64748b;margin-top:6px;">Default Ollama port is 11434. Click Test to verify connection.</p>
             </div>
+            
+            <!-- Editor Theme -->
             <div class="mb-4">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-palette mr-1"></i> Editor
-                    Theme</label>
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-palette mr-1"></i> Editor Theme</label>
                 <select id="editor-theme" class="input mt-1" onchange="app.updateEditorTheme()">
                     <option value="vs-dark">Dark Modern</option>
                     <option value="vs">Light</option>
                     <option value="hc-black">High Contrast</option>
                 </select>
             </div>
+            
+            <!-- Font Size -->
             <div class="mb-4">
-                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-font mr-1"></i> Font
-                    Size</label>
+                <label style="font-size:13px;color:#94a3b8;font-weight:500;"><i class="fas fa-font mr-1"></i> Font Size</label>
                 <input type="number" id="editor-font-size" class="input mt-1" value="13" min="10" max="24" step="1">
             </div>
+            
+            <!-- Auto-apply -->
             <div class="mb-4">
                 <label style="font-size:13px;color:#94a3b8;font-weight:500;display:flex;align-items:center;gap:8px;">
                     <i class="fas fa-magic mr-1"></i> Auto-apply AI file changes
-                    <input type="checkbox" id="ai-auto-apply"
-                        style="margin-left:auto;width:18px;height:18px;cursor:pointer;">
+                    <input type="checkbox" id="ai-auto-apply" style="margin-left:auto;width:18px;height:18px;cursor:pointer;">
                 </label>
-                <p style="font-size:11px;color:#64748b;margin-top:6px;">When enabled, AI can directly create, modify,
-                    and delete files without confirmation</p>
+                <p style="font-size:11px;color:#64748b;margin-top:6px;">When enabled, AI can directly create, modify, and delete files without confirmation</p>
             </div>
+            
+            <!-- Export and Reset Buttons -->
             <div style="display:flex;gap:10px;margin-top:20px;">
-                <button onclick="app.exportProject()" class="btn btn-secondary" style="flex:1;"><i
-                        class="fas fa-download mr-2"></i>Export Project</button>
-                <button onclick="app.clearAllData()" class="btn btn-danger" style="flex:1;"><i
-                        class="fas fa-trash-alt mr-2"></i>Reset All</button>
+                <button onclick="app.exportProject()" class="btn btn-secondary" style="flex:1;"><i class="fas fa-download mr-2"></i>Export Project</button>
+                <button onclick="app.clearAllData()" class="btn btn-danger" style="flex:1;"><i class="fas fa-trash-alt mr-2"></i>Reset All</button>
             </div>
-            <button onclick="app.saveSettingsAndClose()" class="btn btn-primary" style="width:100%;margin-top:20px;"><i
-                    class="fas fa-check mr-2"></i>Save & Close</button>
+            
+            <!-- Save Button -->
+            <button onclick="app.saveSettingsAndClose()" class="btn btn-primary" style="width:100%;margin-top:20px;">
+                <i class="fas fa-check mr-2"></i>Save & Close
+            </button>
         </div>
     </div>
 
