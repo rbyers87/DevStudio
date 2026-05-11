@@ -135,14 +135,14 @@
         <section class="editor-section">
             <div class="tabs-bar" id="tabs-container"></div>
 
-            <!-- Editor Search Bar -->
+            <!-- Editor Search Bar - Replace the existing editor-search-bar div with this -->
             <div class="editor-search-bar" id="editor-search-bar"
                 style="display: none; padding: 8px 12px; background: #1e293b; border-bottom: 1px solid #334155; gap: 8px; align-items: center; flex-wrap: wrap;">
                 <div style="display: flex; gap: 8px; align-items: center; flex: 1;">
                     <i class="fas fa-search" style="color: #64748b; font-size: 12px;"></i>
                     <input type="text" id="editor-search-input" placeholder="Find..."
                         style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 13px; width: 200px;"
-                        onkeyup="app.performEditorSearch()">
+                        onkeydown="app.handleSearchKeydown(event)" onkeyup="app.handleSearchKeyup(event)">
                     <input type="text" id="editor-replace-input" placeholder="Replace with..."
                         style="background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; color: #e2e8f0; font-size: 13px; width: 200px; display: none;">
                     <div style="display: flex; gap: 4px;">
