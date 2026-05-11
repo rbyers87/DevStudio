@@ -578,11 +578,12 @@ app.showSearchStats = function (matches, total) {
 };
 
 // ============================================================
-// EDITOR SEARCH (Find/Replace) - FIXED VERSION
+// EDITOR SEARCH (Find/Replace) - IMPROVED VERSION
 // ============================================================
 
 // Debounce timer for search
 app.searchDebounceTimer = null;
+app.lastSearchTerm = '';
 
 app.handleSearchKeydown = function (e) {
     // Stop propagation to prevent editor from receiving these keys
@@ -603,6 +604,12 @@ app.handleSearchKeydown = function (e) {
         e.preventDefault();
         this.closeEditorSearch();
     }
+
+    // Handle arrow keys while in search box - don't let them affect editor
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+    }
 };
 
 app.handleSearchKeyup = function (e) {
@@ -614,10 +621,19 @@ app.handleSearchKeyup = function (e) {
         clearTimeout(this.searchDebounceTimer);
     }
 
-    // Only search after user stops typing (300ms delay)
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+
+    // Don't search if the term hasn't changed
+    if (searchTerm === this.lastSearchTerm) {
+        return;
+    }
+
+    this.lastSearchTerm = searchTerm;
+
+    // Only search after user stops typing (500ms delay for smoother experience)
     this.searchDebounceTimer = setTimeout(() => {
-        this.performEditorSearch();
-    }, 300);
+        this.performEditorSearch(true); // Reset to first match on new search
+    }, 500);
 };
 
 app.openEditorSearch = function () {
@@ -629,31 +645,16 @@ app.openEditorSearch = function () {
     if (searchInput) {
         searchInput.focus();
         searchInput.select();
-    }
 
-    // Prevent editor from getting focus
-    if (searchInput) {
-        searchInput.addEventListener('blur', function () {
-            // Small delay to allow clicking on buttons
-            setTimeout(() => {
-                if (document.activeElement !== searchInput) {
-                    // Don't blur if we're clicking on search-related buttons
-                    const target = document.activeElement;
-                    if (target && target.closest && !target.closest('.editor-search-bar')) {
-                        // Keep focus on search input
-                        searchInput.focus();
-                    }
-                }
-            }, 100);
-        });
-    }
-
-    if (!this.useFallbackEditor && this.editor) {
-        const selection = this.editor.getSelection();
-        const selectedText = this.editor.getModel().getValueInRange(selection);
-        if (selectedText && selectedText.trim()) {
-            searchInput.value = selectedText;
-            this.performEditorSearch();
+        // Store current selection to use as search term
+        if (!this.useFallbackEditor && this.editor) {
+            const selection = this.editor.getSelection();
+            const selectedText = this.editor.getModel().getValueInRange(selection);
+            if (selectedText && selectedText.trim()) {
+                searchInput.value = selectedText;
+                this.lastSearchTerm = selectedText;
+                this.performEditorSearch(true);
+            }
         }
     }
 };
@@ -667,44 +668,28 @@ app.closeEditorSearch = function () {
         clearTimeout(this.searchDebounceTimer);
     }
 
+    // Clear search highlights
     if (!this.useFallbackEditor && this.editor) {
         this.editor.getModel().findMatches('', false, false, false, null, true);
         // Return focus to editor
-        this.editor.focus();
+        setTimeout(() => {
+            if (this.editor) this.editor.focus();
+        }, 100);
     } else {
         const textarea = document.getElementById('fallback-editor');
         if (textarea) textarea.focus();
     }
 
-    const searchInput = document.getElementById('editor-search-input');
-    if (searchInput) searchInput.value = '';
+    // Reset search state
+    this.lastSearchTerm = '';
+    this.searchMatches = [];
+    this.currentMatchIndex = -1;
     document.getElementById('search-stats').innerHTML = '';
 };
 
-app.toggleReplaceMode = function () {
-    const replaceInput = document.getElementById('editor-replace-input');
-    const replaceControls = document.getElementById('replace-controls');
-    const toggleBtn = document.getElementById('replace-toggle-btn');
-
-    if (!replaceInput || !replaceControls) return;
-
-    const isVisible = replaceInput.style.display !== 'none';
-
-    if (isVisible) {
-        replaceInput.style.display = 'none';
-        replaceControls.style.display = 'none';
-        if (toggleBtn) toggleBtn.style.opacity = '0.6';
-    } else {
-        replaceInput.style.display = 'block';
-        replaceControls.style.display = 'flex';
-        if (toggleBtn) toggleBtn.style.opacity = '1';
-        replaceInput.focus();
-    }
-};
-
-app.performEditorSearch = function () {
+app.performEditorSearch = function (resetToFirst = false) {
     if (this.useFallbackEditor) {
-        this.performFallbackEditorSearch();
+        this.performFallbackEditorSearch(resetToFirst);
         return;
     }
 
@@ -723,6 +708,7 @@ app.performEditorSearch = function () {
     }
 
     try {
+        // Find all matches
         const matches = this.editor.getModel().findMatches(searchTerm, false, isRegex, isCaseSensitive, null, true);
 
         const statsDiv = document.getElementById('search-stats');
@@ -733,10 +719,21 @@ app.performEditorSearch = function () {
         }
 
         if (matches.length > 0) {
-            this.editor.setSelection(matches[0].range);
-            this.editor.revealRangeInCenter(matches[0].range);
-            this.currentMatchIndex = 0;
             this.searchMatches = matches;
+
+            // Reset to first match or keep current position
+            if (resetToFirst || this.currentMatchIndex === -1 || this.currentMatchIndex >= matches.length) {
+                this.currentMatchIndex = 0;
+            } else if (this.currentMatchIndex >= matches.length) {
+                this.currentMatchIndex = 0;
+            }
+
+            // Ensure currentMatchIndex is valid
+            if (this.currentMatchIndex >= 0 && this.currentMatchIndex < matches.length) {
+                this.editor.setSelection(matches[this.currentMatchIndex].range);
+                this.editor.revealRangeInCenter(matches[this.currentMatchIndex].range);
+                this.updateSearchStats();
+            }
         } else {
             this.searchMatches = [];
             this.currentMatchIndex = -1;
@@ -752,11 +749,27 @@ app.findNext = function () {
         return;
     }
 
-    if (!this.searchMatches || this.searchMatches.length === 0) {
-        this.performEditorSearch();
+    if (!this.editor) return;
+
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+
+    // If no search term, do nothing
+    if (!searchTerm) {
         return;
     }
 
+    // If we have no matches or search term changed, perform new search
+    if (!this.searchMatches || this.searchMatches.length === 0 || this.lastSearchTerm !== searchTerm) {
+        this.lastSearchTerm = searchTerm;
+        this.performEditorSearch(true);
+        return;
+    }
+
+    if (this.searchMatches.length === 0) {
+        return;
+    }
+
+    // Move to next match
     this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches.length;
     const match = this.searchMatches[this.currentMatchIndex];
 
@@ -764,6 +777,9 @@ app.findNext = function () {
         this.editor.setSelection(match.range);
         this.editor.revealRangeInCenter(match.range);
         this.updateSearchStats();
+
+        // Highlight the match briefly
+        this.editor.focus();
     }
 };
 
@@ -773,11 +789,27 @@ app.findPrevious = function () {
         return;
     }
 
-    if (!this.searchMatches || this.searchMatches.length === 0) {
-        this.performEditorSearch();
+    if (!this.editor) return;
+
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+
+    // If no search term, do nothing
+    if (!searchTerm) {
         return;
     }
 
+    // If we have no matches or search term changed, perform new search
+    if (!this.searchMatches || this.searchMatches.length === 0 || this.lastSearchTerm !== searchTerm) {
+        this.lastSearchTerm = searchTerm;
+        this.performEditorSearch(true);
+        return;
+    }
+
+    if (this.searchMatches.length === 0) {
+        return;
+    }
+
+    // Move to previous match
     this.currentMatchIndex = (this.currentMatchIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
     const match = this.searchMatches[this.currentMatchIndex];
 
@@ -785,14 +817,100 @@ app.findPrevious = function () {
         this.editor.setSelection(match.range);
         this.editor.revealRangeInCenter(match.range);
         this.updateSearchStats();
+
+        // Highlight the match briefly
+        this.editor.focus();
     }
 };
 
 app.updateSearchStats = function () {
     const statsDiv = document.getElementById('search-stats');
-    if (statsDiv && this.searchMatches && this.searchMatches.length > 0) {
+    if (statsDiv && this.searchMatches && this.searchMatches.length > 0 && this.currentMatchIndex >= 0) {
         statsDiv.innerHTML = `${this.currentMatchIndex + 1} of ${this.searchMatches.length} matches`;
+    } else if (statsDiv && this.searchMatches && this.searchMatches.length > 0) {
+        statsDiv.innerHTML = `${this.searchMatches.length} match${this.searchMatches.length !== 1 ? 'es' : ''}`;
     }
+};
+
+// Fallback for textarea editor (improved)
+app.performFallbackEditorSearch = function (resetToFirst = false) {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+
+    if (!textarea || !searchTerm) {
+        if (textarea) {
+            // Clear selection
+            textarea.setSelectionRange(0, 0);
+        }
+        document.getElementById('search-stats').innerHTML = '';
+        return;
+    }
+
+    const content = textarea.value;
+    const matches = this.findStringIndices(content, searchTerm);
+
+    const statsDiv = document.getElementById('search-stats');
+    if (statsDiv) {
+        statsDiv.innerHTML = `${matches.length} match${matches.length !== 1 ? 'es' : ''}`;
+    }
+
+    this.fallbackMatches = matches;
+
+    if (matches.length > 0) {
+        if (resetToFirst || this.currentFallbackMatch === undefined || this.currentFallbackMatch < 0) {
+            this.currentFallbackMatch = 0;
+        } else if (this.currentFallbackMatch >= matches.length) {
+            this.currentFallbackMatch = 0;
+        }
+
+        this.highlightFallbackMatch(this.currentFallbackMatch);
+    } else {
+        this.currentFallbackMatch = -1;
+        textarea.setSelectionRange(0, 0);
+    }
+};
+
+app.highlightFallbackMatch = function (matchIndex) {
+    const textarea = document.getElementById('fallback-editor');
+    if (!textarea || !this.fallbackMatches || this.fallbackMatches.length === 0) return;
+
+    if (matchIndex < 0 || matchIndex >= this.fallbackMatches.length) {
+        matchIndex = 0;
+    }
+
+    const start = this.fallbackMatches[matchIndex];
+    const end = start + (document.getElementById('editor-search-input')?.value?.length || 0);
+
+    textarea.focus();
+    textarea.setSelectionRange(start, end);
+
+    // Scroll to make the selection visible
+    const lineHeight = 20; // Approximate
+    const lines = textarea.value.substring(0, start).split('\n').length;
+    const scrollPosition = (lines - 5) * lineHeight;
+    textarea.scrollTop = Math.max(0, scrollPosition);
+
+    this.updateSearchStats();
+};
+
+app.findNextFallback = function () {
+    if (!this.fallbackMatches || this.fallbackMatches.length === 0) {
+        this.performFallbackEditorSearch(true);
+        return;
+    }
+
+    this.currentFallbackMatch = (this.currentFallbackMatch + 1) % this.fallbackMatches.length;
+    this.highlightFallbackMatch(this.currentFallbackMatch);
+};
+
+app.findPreviousFallback = function () {
+    if (!this.fallbackMatches || this.fallbackMatches.length === 0) {
+        this.performFallbackEditorSearch(true);
+        return;
+    }
+
+    this.currentFallbackMatch = (this.currentFallbackMatch - 1 + this.fallbackMatches.length) % this.fallbackMatches.length;
+    this.highlightFallbackMatch(this.currentFallbackMatch);
 };
 
 app.replaceCurrent = function () {
@@ -814,8 +932,10 @@ app.replaceCurrent = function () {
             forceMoveMarkers: true
         }]);
 
-        // Refresh search after replace
-        this.performEditorSearch();
+        // Small delay to let editor update, then refresh search
+        setTimeout(() => {
+            this.performEditorSearch(true);
+        }, 50);
     }
 };
 
@@ -841,7 +961,64 @@ app.replaceAll = function () {
         this.saveToStorage();
     }
     this.showToast(`Replaced all occurrences of "${searchTerm}"`);
-    this.performEditorSearch();
+
+    // Clear search after replace all
+    this.lastSearchTerm = '';
+    this.searchMatches = [];
+    this.currentMatchIndex = -1;
+    document.getElementById('search-stats').innerHTML = '';
+};
+
+app.replaceCurrentFallback = function () {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+
+    if (!textarea || !searchTerm) return;
+
+    const content = textarea.value;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+
+    if (selectedText === searchTerm) {
+        const newContent = content.substring(0, start) + replaceTerm + content.substring(end);
+        textarea.value = newContent;
+
+        if (this.currentFile && this.files[this.currentFile]) {
+            this.files[this.currentFile].content = newContent;
+            this.saveToStorage();
+        }
+
+        // Refresh search
+        setTimeout(() => {
+            this.performFallbackEditorSearch(true);
+        }, 50);
+    }
+};
+
+app.replaceAllFallback = function () {
+    const textarea = document.getElementById('fallback-editor');
+    const searchTerm = document.getElementById('editor-search-input')?.value || '';
+    const replaceTerm = document.getElementById('editor-replace-input')?.value || '';
+
+    if (!textarea || !searchTerm) return;
+
+    const newContent = textarea.value.split(searchTerm).join(replaceTerm);
+    textarea.value = newContent;
+
+    if (this.currentFile && this.files[this.currentFile]) {
+        this.files[this.currentFile].content = newContent;
+        this.saveToStorage();
+    }
+
+    this.showToast(`Replaced all occurrences of "${searchTerm}"`);
+
+    // Clear search after replace all
+    this.lastSearchTerm = '';
+    this.fallbackMatches = [];
+    this.currentFallbackMatch = -1;
+    document.getElementById('search-stats').innerHTML = '';
 };
 
 // Fallback for textarea editor
