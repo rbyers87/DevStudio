@@ -2,8 +2,66 @@
 // DevStudio – app-ai.js
 // INTELLIGENT VERSION - AI understands intent, no pattern matching
 // FIXED: Settings persistence for Electron
+// ADDED: Groq AI support
 // ============================================================
 
+// ============================================================
+// PROVIDERS CONFIGURATION
+// ============================================================
+app.providers = {
+    local: { 
+        name: 'Ollama', 
+        help: 'Runs locally on your machine - no API key needed!',
+        cors: true,
+        defaultModel: 'gemma4:latest'
+    },
+    openai: { 
+        name: 'OpenAI', 
+        help: 'Requires API key from platform.openai.com',
+        baseUrl: 'https://api.openai.com/v1/chat/completions',
+        models: ['gpt-4', 'gpt-4-turbo-preview', 'gpt-3.5-turbo'],
+        defaultModel: 'gpt-4'
+    },
+    google: { 
+        name: 'Google Gemini', 
+        help: 'Requires API key from makersuite.google.com',
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta/models',
+        models: ['gemini-pro', 'gemini-pro-vision'],
+        defaultModel: 'gemini-pro'
+    },
+    anthropic: { 
+        name: 'Anthropic Claude', 
+        help: 'Requires API key from console.anthropic.com',
+        baseUrl: 'https://api.anthropic.com/v1/messages',
+        models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
+        defaultModel: 'claude-3-sonnet'
+    },
+    deepseek: { 
+        name: 'Deepseek', 
+        help: 'Requires API key from platform.deepseek.com',
+        baseUrl: 'https://api.deepseek.com/v1/chat/completions',
+        models: ['deepseek-chat', 'deepseek-coder'],
+        defaultModel: 'deepseek-chat'
+    },
+    kimi: { 
+        name: 'Kimi (Moonshot)', 
+        help: 'FREE credits but CORS blocked! Use proxy or switch to Ollama',
+        baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+        models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+        defaultModel: 'moonshot-v1-8k'
+    },
+    groq: { 
+        name: 'Groq', 
+        help: 'Get your Groq API key from https://console.groq.com',
+        baseUrl: 'https://api.groq.com/openai/v1/chat/completions',
+        models: ['mixtral-8x7b-32768', 'llama3-70b-8192', 'llama3-8b-8192', 'gemma-7b-it'],
+        defaultModel: 'mixtral-8x7b-32768'
+    }
+};
+
+// ============================================================
+// SAVE AI SETTINGS
+// ============================================================
 app.saveAISettings = function () {
     // Get all AI settings from the form
     const provider = document.getElementById('ai-provider').value;
@@ -142,6 +200,9 @@ app.saveSettingsAndClose = function () {
     }
 };
 
+// ============================================================
+// OLLAMA CONNECTION TESTS
+// ============================================================
 app.testOllamaConnection = async function () {
     if (this.ai.provider === 'local') {
         try {
@@ -193,9 +254,69 @@ app.showOllamaNotRunningMessage = function () {
 };
 
 // ============================================================
-// ADD THESE NEW METHODS HERE
+// GROQ CONNECTION TEST
 // ============================================================
+app.testGroqConnection = async function () {
+    const apiKey = document.getElementById('ai-api-key')?.value;
+    
+    if (!apiKey) {
+        this.showToast('⚠️ Please enter your Groq API key first');
+        return;
+    }
+    
+    try {
+        const statusEl = document.getElementById('ai-status');
+        if (statusEl) {
+            statusEl.innerHTML = '⏳ Testing Groq...';
+            statusEl.style.background = '#3b82f6';
+        }
+        
+        const response = await fetch('https://api.groq.com/openai/v1/models', {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            const models = data.data.map(m => m.id).join(', ');
+            this.showToast(`✅ Groq connected! Available: ${models}`);
+            
+            if (statusEl) {
+                statusEl.innerHTML = '● Ready';
+                statusEl.style.background = '#334155';
+            }
+            
+            // Update the model dropdown with available models
+            const modelSelect = document.getElementById('ai-model-select');
+            if (modelSelect) {
+                modelSelect.innerHTML = '';
+                data.data.forEach(m => {
+                    const option = document.createElement('option');
+                    option.value = m.id;
+                    option.textContent = m.id;
+                    modelSelect.appendChild(option);
+                });
+                if (this.ai.model) modelSelect.value = this.ai.model;
+            }
+        } else {
+            const error = await response.text();
+            throw new Error(`HTTP ${response.status}: ${error}`);
+        }
+    } catch (error) {
+        console.error('Groq test failed:', error);
+        this.showToast(`❌ Groq connection failed: ${error.message}`);
+        const statusEl = document.getElementById('ai-status');
+        if (statusEl) {
+            statusEl.innerHTML = '⚠️ Error';
+            statusEl.style.background = '#dc2626';
+        }
+    }
+};
 
+// ============================================================
+// OLLAMA MODEL MANAGEMENT
+// ============================================================
 app.fetchOllamaModels = async function () {
     if (this.ai.provider !== 'local') return [];
     
@@ -701,7 +822,7 @@ Respond helpfully and conversationally. You have the ability to create, modify, 
 };
 
 // ============================================================
-// Core AI calling function
+// Core AI calling function - UPDATED WITH GROQ SUPPORT
 // ============================================================
 app.callAIWithSystemPrompt = async function (userPrompt, systemPrompt) {
     const { provider, apiKey, model, endpoint } = this.ai;
@@ -744,7 +865,24 @@ app.callAIWithSystemPrompt = async function (userPrompt, systemPrompt) {
     let url, body, headers;
     const effectiveKey = apiKey || '';
 
-    if (provider === 'openai') {
+    // GROQ - OpenAI-compatible API
+    if (provider === 'groq') {
+        url = endpoint || config.baseUrl || 'https://api.groq.com/openai/v1/chat/completions';
+        headers = { 
+            'Authorization': `Bearer ${effectiveKey}`, 
+            'Content-Type': 'application/json' 
+        };
+        body = JSON.stringify({
+            model: model || config.defaultModel || 'mixtral-8x7b-32768',
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 4096,
+            top_p: 0.95
+        });
+    } else if (provider === 'openai') {
         url = config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
@@ -774,6 +912,7 @@ app.callAIWithSystemPrompt = async function (userPrompt, systemPrompt) {
             generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
         });
     } else {
+        // Fallback for other providers (deepseek, kimi, etc.)
         url = endpoint || config.baseUrl;
         headers = { 'Authorization': `Bearer ${effectiveKey}`, 'Content-Type': 'application/json' };
         body = JSON.stringify({
@@ -931,7 +1070,8 @@ app.updateProviderUI = function () {
         provider === 'deepseek' ? 'badge-deepseek' :
             provider === 'anthropic' ? 'badge-anthropic' :
                 provider === 'google' ? 'badge-google' :
-                    provider === 'local' ? 'badge-local' : 'badge-openai';
+                    provider === 'groq' ? 'badge-groq' :
+                        provider === 'local' ? 'badge-local' : 'badge-openai';
 
     if (badge) {
         badge.className = `provider-badge ${badgeClass}`;
@@ -948,6 +1088,12 @@ app.handleProviderChange = function () {
     const modelText = document.getElementById('ai-model-text');
     const refreshBtnContainer = document.getElementById('model-refresh-container');
     const endpointContainer = document.getElementById('local-endpoint-container');
+
+    // Show/hide Groq test button
+    const testGroqBtn = document.getElementById('test-groq-btn');
+    if (testGroqBtn) {
+        testGroqBtn.style.display = provider === 'groq' ? 'inline-flex' : 'none';
+    }
 
     // Handle model input type based on provider
     if (provider === 'local') {
@@ -1002,7 +1148,10 @@ app.handleProviderChange = function () {
 
     const hint = document.getElementById('api-key-hint');
     if (hint) {
-        if (provider === 'kimi') {
+        if (provider === 'groq') {
+            hint.textContent = 'Get your Groq API key from https://console.groq.com (Free tier available)';
+            hint.style.color = '#60a5fa';
+        } else if (provider === 'kimi') {
             hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
             hint.style.color = '#fbbf24';
         } else if (provider === 'deepseek') {
@@ -1017,3 +1166,48 @@ app.handleProviderChange = function () {
         }
     }
 };
+
+// ============================================================
+// INITIALIZATION - Load AI settings on startup
+// ============================================================
+// Make sure AI settings are loaded when the app initializes
+if (!app.ai) {
+    app.ai = {
+        provider: 'local',
+        apiKey: '',
+        model: 'gemma4:latest',
+        endpoint: 'http://localhost:11434',
+        autoApply: false
+    };
+}
+
+// Load saved AI settings from storage
+const savedAISettings = localStorage.getItem('devstudio-ai-settings');
+if (savedAISettings) {
+    try {
+        const settings = JSON.parse(savedAISettings);
+        app.ai.provider = settings.provider || 'local';
+        app.ai.apiKey = settings.apiKey || '';
+        app.ai.model = settings.model || 'gemma4:latest';
+        app.ai.endpoint = settings.endpoint || 'http://localhost:11434';
+        app.ai.autoApply = settings.autoApply || false;
+        console.log('AI settings loaded:', app.ai);
+    } catch (e) {
+        console.warn('Failed to load AI settings:', e);
+    }
+}
+
+// ============================================================
+// ADD GROQ BADGE STYLES TO STYLES.CSS (ADD THIS TO YOUR CSS FILE)
+// ============================================================
+// .badge-groq {
+//     background: #1a1a2e;
+//     color: #7b61ff;
+//     border: 1px solid #7b61ff;
+// }
+// 
+// .provider-badge.badge-groq {
+//     background: #1a1a2e;
+//     color: #7b61ff;
+//     border: 1px solid #7b61ff;
+// }
