@@ -998,6 +998,8 @@ app.toggleSettings = function () {
     const themeSelect = document.getElementById('editor-theme');
     const fontSizeInput = document.getElementById('editor-font-size');
     const autoApplyCheckbox = document.getElementById('ai-auto-apply');
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
     
     if (providerSelect) providerSelect.value = this.ai.provider;
     if (apiKeyInput) apiKeyInput.value = this.ai.apiKey || '';
@@ -1008,6 +1010,22 @@ app.toggleSettings = function () {
     
     // Trigger provider change to populate models
     this.handleProviderChange();
+    
+    // After handleProviderChange, set the model value if it exists
+    setTimeout(() => {
+        if (this.ai.provider === 'local') {
+            // For local, the model should be in the dropdown after populateOllamaModels
+            if (modelSelect && this.ai.model) {
+                modelSelect.value = this.ai.model;
+            }
+        } else if (modelSelect && this.ai.model) {
+            // For cloud providers, set the dropdown value
+            modelSelect.value = this.ai.model;
+        } else if (modelText && this.ai.model) {
+            // For text input, set the value
+            modelText.value = this.ai.model;
+        }
+    }, 500);
     
     console.log('Settings modal opened - Current settings:', {
         theme: this.settings.theme,
@@ -1097,37 +1115,63 @@ app.handleProviderChange = function () {
 
     // Handle model input type based on provider
     if (provider === 'local') {
-        // For Ollama, try to fetch installed models
+        // For Ollama, show dropdown with refresh button
         if (modelContainer) modelContainer.style.display = 'block';
         if (refreshBtnContainer) refreshBtnContainer.style.display = 'block';
         
-        // Check if Ollama is running and fetch models
+        // Show the dropdown, hide the text input
+        if (modelSelect) {
+            modelSelect.style.display = 'block';
+            // Don't clear the options - populateOllamaModels will handle it
+        }
+        if (modelText) {
+            modelText.style.display = 'none';
+        }
+        
+        // Fetch Ollama models
         this.populateOllamaModels();
+        
     } else if (config && config.models && config.models.length > 0) {
-        // For cloud providers, show dropdown with predefined models
+        // For cloud providers with predefined models
         if (modelContainer) modelContainer.style.display = 'block';
         if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
         
         if (modelSelect) {
             modelSelect.style.display = 'block';
-            modelSelect.innerHTML = '<option value="">Select a model...</option>';
+            // Clear existing options
+            modelSelect.innerHTML = '';
+            
+            // Add the models from config
             config.models.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model;
                 option.textContent = model;
-                if (this.ai.model === model) option.selected = true;
+                if (this.ai.model === model) {
+                    option.selected = true;
+                }
                 modelSelect.appendChild(option);
             });
+            
+            // If no model is selected and there are models, select the first one
+            if (!this.ai.model && config.models.length > 0) {
+                modelSelect.value = config.models[0];
+                this.ai.model = config.models[0];
+            }
         }
-        if (modelText) modelText.style.display = 'none';
+        if (modelText) {
+            modelText.style.display = 'none';
+        }
     } else {
-        // Fallback to text input
+        // Fallback to text input for custom providers
         if (modelContainer) modelContainer.style.display = 'block';
         if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
-        if (modelSelect) modelSelect.style.display = 'none';
+        if (modelSelect) {
+            modelSelect.style.display = 'none';
+        }
         if (modelText) {
             modelText.style.display = 'block';
             modelText.value = this.ai.model || config?.defaultModel || '';
+            modelText.placeholder = 'Enter model name...';
         }
     }
 
@@ -1138,14 +1182,19 @@ app.handleProviderChange = function () {
         endpointContainer.style.display = 'none';
     }
 
+    // Update help text
     const helpText = document.getElementById('provider-help');
-    if (helpText && config) helpText.textContent = config.help;
+    if (helpText && config) {
+        helpText.textContent = config.help;
+    }
     
+    // Update CORS warning
     const corsWarning = document.getElementById('cors-warning');
     if (corsWarning) {
         corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
     }
 
+    // Update API key hint
     const hint = document.getElementById('api-key-hint');
     if (hint) {
         if (provider === 'groq') {
@@ -1163,6 +1212,20 @@ app.handleProviderChange = function () {
         } else {
             hint.textContent = 'Enter your API key for the selected provider';
             hint.style.color = '#64748b';
+        }
+    }
+    
+    // Update the model help text based on provider
+    const modelHelpText = document.getElementById('model-help-text');
+    if (modelHelpText) {
+        if (provider === 'local') {
+            modelHelpText.innerHTML = 'Loading Ollama models... Click refresh to update the list.';
+        } else if (provider === 'groq') {
+            modelHelpText.textContent = 'Groq models: mixtral-8x7b, llama3-70b, llama3-8b, gemma-7b';
+        } else if (config && config.models) {
+            modelHelpText.textContent = `Available models for ${config.name}: ${config.models.join(', ')}`;
+        } else {
+            modelHelpText.textContent = 'Enter the model name manually';
         }
     }
 };
