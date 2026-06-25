@@ -1,42 +1,145 @@
 // ============================================================
 // DevStudio – app-ai.js
 // INTELLIGENT VERSION - AI understands intent, no pattern matching
+// FIXED: Settings persistence for Electron
 // ============================================================
 
 app.saveAISettings = function () {
+    // Get all AI settings from the form
     const provider = document.getElementById('ai-provider').value;
+    const apiKey = document.getElementById('ai-api-key').value.trim();
+    
+    // Get model from either select or text input
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    let model = '';
+    
+    if (provider === 'local') {
+        // For Ollama, check if dropdown is visible and get value
+        if (modelSelect && modelSelect.style.display !== 'none') {
+            model = modelSelect.value;
+            // Skip the refresh option if selected
+            if (model === '__REFRESH__') {
+                model = this.ai.model || '';
+            }
+        } else if (modelText && modelText.style.display !== 'none') {
+            model = modelText.value.trim();
+        }
+    } else {
+        // For cloud providers
+        if (modelSelect && modelSelect.style.display !== 'none') {
+            model = modelSelect.value;
+        } else if (modelText && modelText.style.display !== 'none') {
+            model = modelText.value.trim();
+        }
+    }
+    
+    const endpoint = document.getElementById('ai-endpoint').value.trim();
+    const autoApply = document.getElementById('ai-auto-apply').checked;
+    
+    // Save to app.ai object
     this.ai = {
         provider: provider,
-        apiKey: document.getElementById('ai-api-key').value.trim(),
-        model: document.getElementById('ai-model').value.trim(),
-        endpoint: document.getElementById('ai-endpoint').value.trim(),
-        autoApply: document.getElementById('ai-auto-apply').checked
+        apiKey: apiKey,
+        model: model,
+        endpoint: endpoint,
+        autoApply: autoApply
     };
-
+    
+    // Set defaults for local provider if needed
     if (this.ai.provider === 'local' && !this.ai.model) {
         this.ai.model = 'gemma4:latest';
     }
     if (this.ai.provider === 'local' && !this.ai.endpoint) {
         this.ai.endpoint = 'http://localhost:11434';
     }
-
-    this.saveToStorage();
+    
+    // Update UI badge to show active provider
     this.updateProviderUI();
+    
+    console.log('AI Settings saved:', {
+        provider: this.ai.provider,
+        model: this.ai.model,
+        autoApply: this.ai.autoApply
+    });
 };
 
 app.saveSettingsAndClose = function () {
+    // ============================================================
+    // SAVE EDITOR SETTINGS
+    // ============================================================
+    
+    // Save font size
     const fontSize = parseInt(document.getElementById('editor-font-size').value);
     if (fontSize >= 10 && fontSize <= 24) {
         this.settings.fontSize = fontSize;
     }
-    this.settings.theme = document.getElementById('editor-theme').value;
+    
+    // Save theme
+    const theme = document.getElementById('editor-theme').value;
+    this.settings.theme = theme;
+    
+    // ============================================================
+    // SAVE AI SETTINGS (saves provider, apiKey, model, endpoint, autoApply)
+    // ============================================================
     this.saveAISettings();
+    
+    // ============================================================
+    // APPLY SETTINGS TO EDITOR
+    // ============================================================
+    
+    // Apply theme to editor
     this.updateEditorTheme();
-    if (this.editor) {
+    
+    // Apply font size to editor
+    if (this.editor && !this.useFallbackEditor) {
         this.editor.updateOptions({ fontSize: this.settings.fontSize });
+    } else if (this.useFallbackEditor) {
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            fallbackEditor.style.fontSize = this.settings.fontSize + 'px';
+        }
     }
+    
+    // ============================================================
+    // FORCE SAVE TO STORAGE (saves EVERYTHING)
+    // ============================================================
+    this.saveToStorage();
+    
+    // ============================================================
+    // CLOSE MODAL AND SHOW CONFIRMATION
+    // ============================================================
     this.closeModal('settings-modal');
-    this.showToast('Settings saved successfully!');
+    this.showToast('All settings saved successfully!');
+    
+    // For Electron, force reapply theme (Monaco loads differently in Electron)
+    if (window.isElectron && this.editor && !this.useFallbackEditor) {
+        setTimeout(() => {
+            try {
+                if (typeof monaco !== 'undefined' && monaco.editor) {
+                    monaco.editor.setTheme(this.settings.theme);
+                    console.log('Theme reapplied for Electron:', this.settings.theme);
+                } else if (this.editor.updateOptions) {
+                    this.editor.updateOptions({ theme: this.settings.theme });
+                }
+            } catch (e) {
+                console.error('Failed to reapply theme:', e);
+            }
+        }, 100);
+    }
+    
+    // For web version, also ensure theme is applied
+    if (!window.isElectron && this.editor && !this.useFallbackEditor) {
+        setTimeout(() => {
+            try {
+                if (typeof monaco !== 'undefined' && monaco.editor) {
+                    monaco.editor.setTheme(this.settings.theme);
+                }
+            } catch (e) {
+                console.error('Failed to reapply theme:', e);
+            }
+        }, 50);
+    }
 };
 
 app.testOllamaConnection = async function () {
@@ -87,6 +190,120 @@ app.showOllamaNotRunningMessage = function () {
     );
 
     this.showToast('⚠️ Ollama not running - check chat for setup instructions', 5000);
+};
+
+// ============================================================
+// ADD THESE NEW METHODS HERE
+// ============================================================
+
+app.fetchOllamaModels = async function () {
+    if (this.ai.provider !== 'local') return [];
+    
+    const endpoint = this.ai.endpoint || 'http://localhost:11434';
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`${endpoint}/api/tags`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            const data = await response.json();
+            const models = data.models || [];
+            const modelNames = models.map(m => m.name);
+            console.log('Found Ollama models:', modelNames);
+            return modelNames;
+        } else {
+            console.warn('Failed to fetch Ollama models');
+            return [];
+        }
+    } catch (error) {
+        console.warn('Could not fetch Ollama models:', error.message);
+        return [];
+    }
+};
+
+app.populateOllamaModels = async function () {
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    const modelContainer = document.getElementById('ai-model-container');
+    const refreshBtn = document.getElementById('refresh-models-btn');
+    
+    if (!modelSelect || this.ai.provider !== 'local') return;
+    
+    // Show loading state
+    if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
+        refreshBtn.disabled = true;
+    }
+    
+    const models = await this.fetchOllamaModels();
+    
+    if (models.length > 0) {
+        // Show dropdown for Ollama with installed models
+        modelSelect.style.display = 'block';
+        modelText.style.display = 'none';
+        
+        modelSelect.innerHTML = '<option value="">Select a model...</option>';
+        
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            // Display model name with size info if available
+            let displayName = model;
+            option.textContent = displayName;
+            if (this.ai.model === model) option.selected = true;
+            modelSelect.appendChild(option);
+        });
+        
+        // Add a refresh option at the top
+        const refreshOption = document.createElement('option');
+        refreshOption.value = "__REFRESH__";
+        refreshOption.textContent = "⟳ Refresh model list...";
+        refreshOption.disabled = true;
+        modelSelect.insertBefore(refreshOption, modelSelect.firstChild);
+        
+        // Update help text
+        const helpText = document.getElementById('model-help-text');
+        if (helpText) {
+            helpText.innerHTML = `✓ Found ${models.length} installed model(s). Select from dropdown or <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">click here to refresh</a>.`;
+        }
+        
+        // If no model is selected and there are models, select the first one
+        if (!this.ai.model && models.length > 0) {
+            this.ai.model = models[0];
+            modelSelect.value = models[0];
+        }
+    } else {
+        // Fallback to text input if no models found
+        modelSelect.style.display = 'none';
+        modelText.style.display = 'block';
+        modelText.placeholder = 'gemma4:latest, codellama, llama3, mistral';
+        
+        const helpText = document.getElementById('model-help-text');
+        if (helpText) {
+            helpText.innerHTML = 'No Ollama models found. Make sure Ollama is running and you have installed models. <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">Click here to refresh</a>.';
+        }
+    }
+    
+    if (refreshBtn) {
+        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        refreshBtn.disabled = false;
+    }
+};
+
+app.refreshOllamaModels = async function () {
+    if (this.ai.provider !== 'local') {
+        this.showToast('Switch to Local Ollama provider first');
+        return;
+    }
+    
+    this.showToast('Refreshing Ollama models...');
+    await this.populateOllamaModels();
+    this.showToast('Model list refreshed!');
 };
 
 app.addChatMessage = function (text, sender) {
@@ -635,15 +852,33 @@ app.toggleChat = function () {
 app.toggleSettings = function () {
     const modal = document.getElementById('settings-modal');
     if (modal) modal.classList.remove('hidden');
-    document.getElementById('ai-provider').value = this.ai.provider;
-    document.getElementById('ai-api-key').value = this.ai.apiKey;
-    document.getElementById('ai-model').value = this.ai.model;
-    document.getElementById('ai-endpoint').value = this.ai.endpoint;
-    document.getElementById('editor-theme').value = this.settings.theme;
-    document.getElementById('editor-font-size').value = this.settings.fontSize;
-    document.getElementById('ai-auto-apply').checked = this.ai.autoApply || false;
-    this.updateProviderHelp();
+    
+    const providerSelect = document.getElementById('ai-provider');
+    const apiKeyInput = document.getElementById('ai-api-key');
+    const endpointInput = document.getElementById('ai-endpoint');
+    const themeSelect = document.getElementById('editor-theme');
+    const fontSizeInput = document.getElementById('editor-font-size');
+    const autoApplyCheckbox = document.getElementById('ai-auto-apply');
+    
+    if (providerSelect) providerSelect.value = this.ai.provider;
+    if (apiKeyInput) apiKeyInput.value = this.ai.apiKey || '';
+    if (endpointInput) endpointInput.value = this.ai.endpoint || '';
+    if (themeSelect) themeSelect.value = this.settings.theme;
+    if (fontSizeInput) fontSizeInput.value = this.settings.fontSize;
+    if (autoApplyCheckbox) autoApplyCheckbox.checked = this.ai.autoApply || false;
+    
+    // Trigger provider change to populate models
     this.handleProviderChange();
+    
+    console.log('Settings modal opened - Current settings:', {
+        theme: this.settings.theme,
+        fontSize: this.settings.fontSize,
+        aiProvider: this.ai.provider,
+        aiModel: this.ai.model,
+        autoApply: this.ai.autoApply
+    });
+    
+    this.updateProviderHelp();
 };
 
 app.updateProviderHelp = function () {
@@ -657,41 +892,36 @@ app.updateProviderHelp = function () {
 };
 
 app.updateEditorTheme = function () {
-    this.settings.theme = document.getElementById('editor-theme').value;
-    if (this.editor) {
-        monaco.editor.setTheme(this.settings.theme);
+    const themeSelect = document.getElementById('editor-theme');
+    if (themeSelect) {
+        this.settings.theme = themeSelect.value;
     }
-    this.saveToStorage();
-};
-
-app.saveToStorage = function () {
-    const data = {
-        files: this.files,
-        versions: this.versions,
-        github: this.github,
-        ai: this.ai,
-        settings: this.settings,
-        expandedFolders: Array.from(this.expandedFolders),
-        currentFolder: this.currentFolder,
-        currentFile: this.currentFile
-    };
-    localStorage.setItem('devstudio_data', JSON.stringify(data));
-};
-
-app.showToast = function (message, duration = 3000) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.innerHTML = `<i class="fas fa-info-circle mr-2"></i>${message}`;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, duration);
-};
-
-app.closeModal = function (id) {
-    const modal = document.getElementById(id);
-    if (modal) modal.classList.add('hidden');
+    
+    // Apply theme to Monaco editor
+    if (this.editor && !this.useFallbackEditor) {
+        try {
+            if (typeof monaco !== 'undefined' && monaco.editor) {
+                monaco.editor.setTheme(this.settings.theme);
+                console.log('Theme changed to:', this.settings.theme);
+            } else if (this.editor.updateOptions) {
+                this.editor.updateOptions({ theme: this.settings.theme });
+            }
+        } catch (error) {
+            console.error('Error changing theme:', error);
+        }
+    } else if (this.useFallbackEditor) {
+        // Update fallback editor theme
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            if (this.settings.theme === 'vs-dark' || this.settings.theme === 'hc-black') {
+                fallbackEditor.style.background = '#1e1e1e';
+                fallbackEditor.style.color = '#d4d4d4';
+            } else {
+                fallbackEditor.style.background = '#ffffff';
+                fallbackEditor.style.color = '#000000';
+            }
+        }
+    }
 };
 
 app.updateProviderUI = function () {
@@ -706,82 +936,84 @@ app.updateProviderUI = function () {
     if (badge) {
         badge.className = `provider-badge ${badgeClass}`;
         badge.textContent = provider === 'local' ? 'Ollama' : this.providers[provider]?.name || provider;
+        badge.style.display = 'inline-flex';
     }
 };
 
 app.handleProviderChange = function () {
     const provider = document.getElementById('ai-provider').value;
     const config = this.providers[provider];
-    const modelInput = document.getElementById('ai-model');
+    const modelContainer = document.getElementById('ai-model-container');
+    const modelSelect = document.getElementById('ai-model-select');
+    const modelText = document.getElementById('ai-model-text');
+    const refreshBtnContainer = document.getElementById('model-refresh-container');
     const endpointContainer = document.getElementById('local-endpoint-container');
 
+    // Handle model input type based on provider
+    if (provider === 'local') {
+        // For Ollama, try to fetch installed models
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'block';
+        
+        // Check if Ollama is running and fetch models
+        this.populateOllamaModels();
+    } else if (config && config.models && config.models.length > 0) {
+        // For cloud providers, show dropdown with predefined models
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
+        
+        if (modelSelect) {
+            modelSelect.style.display = 'block';
+            modelSelect.innerHTML = '<option value="">Select a model...</option>';
+            config.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                if (this.ai.model === model) option.selected = true;
+                modelSelect.appendChild(option);
+            });
+        }
+        if (modelText) modelText.style.display = 'none';
+    } else {
+        // Fallback to text input
+        if (modelContainer) modelContainer.style.display = 'block';
+        if (refreshBtnContainer) refreshBtnContainer.style.display = 'none';
+        if (modelSelect) modelSelect.style.display = 'none';
+        if (modelText) {
+            modelText.style.display = 'block';
+            modelText.value = this.ai.model || config?.defaultModel || '';
+        }
+    }
+
+    // Handle local endpoint visibility
     if (provider === 'local' && endpointContainer) {
         endpointContainer.style.display = 'block';
-        if (modelInput) modelInput.placeholder = 'gemma4:latest, codellama, llama3, mistral';
     } else if (endpointContainer) {
         endpointContainer.style.display = 'none';
-        if (modelInput && config) modelInput.placeholder = config.models[0];
     }
 
     const helpText = document.getElementById('provider-help');
     if (helpText && config) helpText.textContent = config.help;
-};
-
-// UI methods needed for refresh
-app.renderFileTree = function () {
-    const container = document.getElementById('file-tree');
-    if (!container) return;
-    container.innerHTML = '';
-
-    const files = Object.keys(this.files).filter(path => this.files[path].type !== 'folder');
-    files.sort();
-
-    files.forEach(path => {
-        const div = document.createElement('div');
-        div.className = `tree-item ${this.currentFile === path ? 'active' : ''}`;
-        const fileName = path.split('/').pop();
-
-        const ext = fileName.split('.').pop();
-        let iconClass = 'fa-file-code';
-        if (ext === 'html') iconClass = 'fa-html5';
-        else if (ext === 'css') iconClass = 'fa-css3';
-        else if (ext === 'js') iconClass = 'fa-js';
-
-        div.innerHTML = `<i class="fab ${iconClass} icon" style="width: 18px;"></i><span class="name" style="flex:1;">${fileName}</span>`;
-        div.onclick = () => this.openFile(path);
-        container.appendChild(div);
-    });
-
-    if (files.length === 0) {
-        container.innerHTML = '<div class="text-xs text-slate-500 text-center p-4">No files yet.<br>Create one with the + button.</div>';
+    
+    const corsWarning = document.getElementById('cors-warning');
+    if (corsWarning) {
+        corsWarning.style.display = (config && config.cors) ? 'block' : 'none';
     }
-};
 
-app.updateFolderSelector = function () {
-    const select = document.getElementById('folder-select');
-    if (!select) return;
-    select.innerHTML = '<option value="">📁 Root</option>';
-};
-
-app.openFile = function (filename) {
-    if (this.files[filename]?.type === 'folder') return;
-    this.currentFile = filename;
-    const content = this.files[filename]?.content || '';
-    if (this.editor) {
-        const ext = filename.split('.').pop();
-        let language = 'plaintext';
-        if (ext === 'js') language = 'javascript';
-        else if (ext === 'html') language = 'html';
-        else if (ext === 'css') language = 'css';
-        else if (ext === 'json') language = 'json';
-        else if (ext === 'py') language = 'python';
-
-        const model = monaco.editor.createModel(content, language);
-        this.editor.setModel(model);
-        setTimeout(() => { if (this.editor) this.editor.layout(); }, 50);
-    }
-    this.renderFileTree();
-    if (filename.endsWith('.html') && typeof this.updatePreview === 'function') {
-        this.updatePreview();
+    const hint = document.getElementById('api-key-hint');
+    if (hint) {
+        if (provider === 'kimi') {
+            hint.textContent = 'Kimi: FREE credits but CORS blocked! Use proxy or switch to Ollama';
+            hint.style.color = '#fbbf24';
+        } else if (provider === 'deepseek') {
+            hint.textContent = 'Deepseek: Requires paid credits';
+            hint.style.color = '#f87171';
+        } else if (provider === 'local') {
+            hint.textContent = '✨ No API key needed - runs locally on your machine!';
+            hint.style.color = '#10b981';
+        } else {
+            hint.textContent = 'Enter your API key for the selected provider';
+            hint.style.color = '#64748b';
+        }
     }
 };
