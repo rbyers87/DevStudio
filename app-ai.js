@@ -204,27 +204,70 @@ app.saveSettingsAndClose = function () {
 // OLLAMA CONNECTION TESTS
 // ============================================================
 app.testOllamaConnection = async function () {
-    if (this.ai.provider === 'local') {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-            const response = await fetch(`${this.ai.endpoint}/api/tags`, {
-                method: 'GET',
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            if (response.ok) {
-                const data = await response.json();
-                const models = data.models?.map(m => m.name).join(', ') || 'unknown';
-                this.showToast(`✅ Ollama connected! Available: ${models}`);
-                this.addChatMessage(`✅ Successfully connected to Ollama at ${this.ai.endpoint}\nAvailable models: ${models}`, 'system');
+    if (this.ai.provider !== 'local') return;
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const response = await fetch(`${this.ai.endpoint}/api/tags`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Ollama tags response:', data);
+            
+            // Use the same parser as fetchOllamaModels
+            let models = [];
+            if (data.models && Array.isArray(data.models)) {
+                if (data.models.length > 0 && typeof data.models[0] === 'string') {
+                    models = data.models;
+                } else {
+                    models = data.models.map(m => m.name || m.model || m).filter(Boolean);
+                }
+            } else if (data.model && Array.isArray(data.model)) {
+                if (data.model.length > 0 && typeof data.model[0] === 'string') {
+                    models = data.model;
+                } else {
+                    models = data.model.map(m => m.name || m.model || m).filter(Boolean);
+                }
+            } else if (Array.isArray(data)) {
+                if (data.length > 0 && typeof data[0] === 'string') {
+                    models = data;
+                } else {
+                    models = data.map(m => m.name || m.model || m).filter(Boolean);
+                }
             } else {
-                this.showOllamaNotRunningMessage();
+                for (const key in data) {
+                    const val = data[key];
+                    if (Array.isArray(val) && val.length > 0) {
+                        if (typeof val[0] === 'string') {
+                            models = val;
+                        } else if (val[0].name) {
+                            models = val.map(m => m.name || m.model || m).filter(Boolean);
+                        }
+                        if (models.length > 0) break;
+                    }
+                }
             }
-        } catch (error) {
-            console.warn('Ollama not reachable:', error);
+            models = models.filter(m => m && typeof m === 'string' && m.trim() !== '');
+            
+            const modelsStr = models.length > 0 ? models.join(', ') : 'none found';
+            this.showToast(`✅ Ollama connected! Available: ${modelsStr}`);
+            this.addChatMessage(`✅ Successfully connected to Ollama at ${this.ai.endpoint}\nAvailable models: ${modelsStr}`, 'system');
+            
+            // Refresh the model list in settings if modal is open
+            if (document.getElementById('settings-modal') && !document.getElementById('settings-modal').classList.contains('hidden')) {
+                this.populateOllamaModels();
+            }
+        } else {
             this.showOllamaNotRunningMessage();
         }
+    } catch (error) {
+        console.warn('Ollama not reachable:', error);
+        this.showOllamaNotRunningMessage();
     }
 };
 
@@ -331,16 +374,68 @@ app.fetchOllamaModels = async function () {
         });
         clearTimeout(timeoutId);
         
-        if (response.ok) {
-            const data = await response.json();
-            const models = data.models || [];
-            const modelNames = models.map(m => m.name);
-            console.log('Found Ollama models:', modelNames);
-            return modelNames;
-        } else {
-            console.warn('Failed to fetch Ollama models');
+        if (!response.ok) {
+            console.warn('Ollama /api/tags returned', response.status);
             return [];
         }
+        
+        const data = await response.json();
+        console.log('Ollama raw response:', JSON.stringify(data, null, 2)); // Log full response
+        
+        // ----- PARSING: try every possible format -----
+        let models = [];
+        
+        // 1) If data.models is an array
+        if (data.models && Array.isArray(data.models)) {
+            if (data.models.length > 0) {
+                if (typeof data.models[0] === 'string') {
+                    models = data.models; // e.g. ["gemma4:latest"]
+                } else {
+                    models = data.models.map(m => m.name || m.model || m).filter(Boolean);
+                }
+            }
+        }
+        // 2) If data.model is an array (alternative key)
+        else if (data.model && Array.isArray(data.model)) {
+            if (data.model.length > 0) {
+                if (typeof data.model[0] === 'string') {
+                    models = data.model;
+                } else {
+                    models = data.model.map(m => m.name || m.model || m).filter(Boolean);
+                }
+            }
+        }
+        // 3) If the response itself is an array
+        else if (Array.isArray(data)) {
+            if (data.length > 0) {
+                if (typeof data[0] === 'string') {
+                    models = data;
+                } else {
+                    models = data.map(m => m.name || m.model || m).filter(Boolean);
+                }
+            }
+        }
+        // 4) Fallback: scan all object properties for any array of strings or objects with "name"
+        else {
+            for (const key in data) {
+                const val = data[key];
+                if (Array.isArray(val) && val.length > 0) {
+                    if (typeof val[0] === 'string') {
+                        models = val;
+                        break;
+                    } else if (val[0].name) {
+                        models = val.map(m => m.name || m.model || m).filter(Boolean);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Remove any empty strings or nulls
+        models = models.filter(m => m && typeof m === 'string' && m.trim() !== '');
+        console.log('Parsed models:', models);
+        return models;
+        
     } catch (error) {
         console.warn('Could not fetch Ollama models:', error.message);
         return [];
@@ -350,64 +445,61 @@ app.fetchOllamaModels = async function () {
 app.populateOllamaModels = async function () {
     const modelSelect = document.getElementById('ai-model-select');
     const modelText = document.getElementById('ai-model-text');
-    const modelContainer = document.getElementById('ai-model-container');
     const refreshBtn = document.getElementById('refresh-models-btn');
+    const modelHelpText = document.getElementById('model-help-text');
     
-    if (!modelSelect || this.ai.provider !== 'local') return;
+    if (!modelSelect) return;
+    if (this.ai.provider !== 'local') return;
     
-    // Show loading state
+    // Show loading
     if (refreshBtn) {
         refreshBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
         refreshBtn.disabled = true;
     }
+    if (modelHelpText) modelHelpText.innerHTML = '⏳ Fetching installed Ollama models...';
     
     const models = await this.fetchOllamaModels();
     
+    // Clear existing options
+    modelSelect.innerHTML = '';
+    
     if (models.length > 0) {
-        // Show dropdown for Ollama with installed models
+        // Show dropdown
         modelSelect.style.display = 'block';
         modelText.style.display = 'none';
         
-        modelSelect.innerHTML = '<option value="">Select a model...</option>';
+        // Placeholder
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = 'Select a model...';
+        modelSelect.appendChild(placeholder);
         
+        // Add models
         models.forEach(model => {
             const option = document.createElement('option');
             option.value = model;
-            // Display model name with size info if available
-            let displayName = model;
-            option.textContent = displayName;
+            option.textContent = model;
             if (this.ai.model === model) option.selected = true;
             modelSelect.appendChild(option);
         });
         
-        // Add a refresh option at the top
-        const refreshOption = document.createElement('option');
-        refreshOption.value = "__REFRESH__";
-        refreshOption.textContent = "⟳ Refresh model list...";
-        refreshOption.disabled = true;
-        modelSelect.insertBefore(refreshOption, modelSelect.firstChild);
-        
-        // Update help text
-        const helpText = document.getElementById('model-help-text');
-        if (helpText) {
-            helpText.innerHTML = `✓ Found ${models.length} installed model(s). Select from dropdown or <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">click here to refresh</a>.`;
+        // If no model selected, pick first
+        if (!this.ai.model || !models.includes(this.ai.model)) {
+            const first = models[0];
+            this.ai.model = first;
+            modelSelect.value = first;
         }
         
-        // If no model is selected and there are models, select the first one
-        if (!this.ai.model && models.length > 0) {
-            this.ai.model = models[0];
-            modelSelect.value = models[0];
-        }
+        modelHelpText.innerHTML = `✓ Found ${models.length} model(s). <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">Refresh</a>`;
     } else {
-        // Fallback to text input if no models found
+        // No models found – fallback to text input
         modelSelect.style.display = 'none';
         modelText.style.display = 'block';
+        const defaultModel = 'gemma4:latest';
+        if (!this.ai.model) this.ai.model = defaultModel;
+        modelText.value = this.ai.model;
         modelText.placeholder = 'gemma4:latest, codellama, llama3, mistral';
-        
-        const helpText = document.getElementById('model-help-text');
-        if (helpText) {
-            helpText.innerHTML = 'No Ollama models found. Make sure Ollama is running and you have installed models. <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">Click here to refresh</a>.';
-        }
+        modelHelpText.innerHTML = 'No models found. Make sure Ollama is running and you have pulled a model. <a href="#" onclick="app.refreshOllamaModels(); return false;" style="color: #3b82f6;">Refresh</a>';
     }
     
     if (refreshBtn) {
