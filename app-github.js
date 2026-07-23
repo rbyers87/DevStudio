@@ -2,6 +2,7 @@
 // DevStudio – app-github.js
 // GitHub integration
 // FIXED: deployToGitHub returns success/fail counts
+// FIXED: After loading repo, ensure inputs are not read-only
 // ============================================================
 
 app.showGitHubModal = function () {
@@ -96,6 +97,19 @@ app.loadGitHubRepo = async function () {
         const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
         if (firstHtml) this.openFile(firstHtml);
         else if (Object.keys(this.files).length > 0) this.openFile(Object.keys(this.files)[0]);
+
+        // CRITICAL FIX: Ensure text inputs are not read-only after loading repo
+        const fallbackEditor = document.getElementById('fallback-editor');
+        if (fallbackEditor) {
+            fallbackEditor.readOnly = false;
+            console.log('Fallback editor readOnly set to false');
+        }
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) {
+            chatInput.readOnly = false;
+            console.log('Chat input readOnly set to false');
+        }
+
     } catch (error) {
         console.error('GitHub load error:', error);
         this.showToast('Error loading repository: ' + error.message);
