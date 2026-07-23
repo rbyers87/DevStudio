@@ -1,6 +1,7 @@
 // ============================================================
 // DevStudio – app-github.js
 // GitHub integration
+// FIXED: deployToGitHub returns success/fail counts
 // ============================================================
 
 app.showGitHubModal = function () {
@@ -128,26 +129,27 @@ app.fetchGitHubContents = async function (owner, repo, path) {
 app.deployToGitHub = async function () {
     if (!this.github.connected) {
         this.showGitHubModal();
-        return;
+        return { successCount: 0, failCount: 0 };
     }
 
     const [owner, repo] = this.github.repo.split('/');
     let successCount = 0;
     let failCount = 0;
 
-    this.showToast('Syncing to GitHub...');
-
     for (const [filename, fileData] of Object.entries(this.files)) {
         if (fileData.type === 'folder') continue;
 
         try {
+            // Check if file exists to get SHA
+            let sha = null;
             const getResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${filename}`, {
                 headers: { 'Authorization': `token ${this.github.token}` }
             });
-
-            let sha = null;
             if (getResponse.ok) {
                 sha = (await getResponse.json()).sha;
+            } else if (getResponse.status !== 404) {
+                // Some other error
+                console.warn(`Failed to check ${filename}: ${getResponse.status}`);
             }
 
             const content = btoa(unescape(encodeURIComponent(fileData.content)));
@@ -169,6 +171,8 @@ app.deployToGitHub = async function () {
             if (putResponse.ok) {
                 successCount++;
             } else {
+                const errorText = await putResponse.text();
+                console.error(`Failed to push ${filename}: ${putResponse.status} ${errorText}`);
                 failCount++;
             }
         } catch (error) {
@@ -177,5 +181,5 @@ app.deployToGitHub = async function () {
         }
     }
 
-    this.showToast(`Synced ${successCount} files to GitHub${failCount > 0 ? ` (${failCount} failed)` : ''}`);
+    return { successCount, failCount };
 };
