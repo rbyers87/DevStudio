@@ -1,6 +1,7 @@
 // ============================================================
 // DevStudio – app-core.js
 // Core application state, storage, initialization
+// FIXED: GitHub repo creation with better error handling and auto-load
 // ============================================================
 
 const app = {
@@ -168,7 +169,7 @@ const app = {
             }
 
             // ============================================================
-            // SEARCH KEYBOARD SHORTCUTS - ADD THIS BLOCK
+            // SEARCH KEYBOARD SHORTCUTS
             // ============================================================
 
             // Ctrl+F / Cmd+F - Open search
@@ -541,11 +542,20 @@ Respond with ONLY the JSON object.`;
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.message || 'Failed to create repo');
+                let message = error.message || 'Unknown error';
+                if (response.status === 422) {
+                    message = 'Repository name already exists or is invalid.';
+                } else if (response.status === 401) {
+                    message = 'Invalid token. Please generate a new one with repo scope.';
+                } else if (response.status === 403) {
+                    message = 'Token lacks repo scope or you have reached your repo limit.';
+                }
+                throw new Error(message);
             }
 
             const repo = await response.json();
             this.github.repo = `${repo.owner.login}/${repo.name}`;
+            this.github.connected = true;
             this.saveToStorage();
 
             const statusSpan = document.getElementById('github-status');
@@ -556,80 +566,70 @@ Respond with ONLY the JSON object.`;
 
         } catch (error) {
             console.error('Repo creation error:', error);
-            this.showToast(`Error creating repo: ${error.message}`);
+            this.showToast(`❌ Error creating repo: ${error.message}`);
             return null;
         }
     },
 
     createAndPushToGitHub: async function (projectDescription, projectName, repoDescription = '') {
-        // Store pending info before async operations
-        const desc = projectDescription;
-        const name = projectName;
-        const repoDesc = repoDescription;
+        // Step 1: Create the project locally
+        const projectCreated = await this.initNewProject(projectDescription, projectName);
+        if (!projectCreated) {
+            this.showToast('❌ Failed to create project locally.');
+            return false;
+        }
 
-        // Step 1: Create the project
-        const projectCreated = await this.initNewProject(desc, name);
-        if (!projectCreated) return false;
-
-        // Step 2: Check if connected to GitHub
+        // Step 2: Check GitHub connection
         if (!this.github.token) {
             const shouldConnect = confirm('Project created! Would you like to connect to GitHub to push this project?');
             if (shouldConnect) {
                 this.showGitHubModal();
-                return false;
             }
-            return true;
+            return false;
         }
 
         // Step 3: Create GitHub repo
-        const repo = await this.createGitHubRepo(name, repoDesc || desc, false);
-        if (!repo) return false;
+        this.showToast('Creating GitHub repository...');
+        const repo = await this.createGitHubRepo(projectName, repoDescription || projectDescription, false);
+        if (!repo) {
+            this.showToast('❌ Failed to create GitHub repository. Check your token permissions.');
+            return false;
+        }
 
         // Step 4: Push files to GitHub
         this.showToast('Pushing files to GitHub...');
-        await this.deployToGitHub();
+        const deployResult = await this.deployToGitHub();
+        if (deployResult && deployResult.failCount > 0) {
+            this.showToast(`⚠️ ${deployResult.successCount} files pushed, ${deployResult.failCount} failed.`);
+        } else {
+            this.showToast(`✅ All files pushed to ${this.github.repo}`);
+        }
 
-        // ============================================================
-        // STEP 5: AUTO-LOAD THE REPO (THIS IS THE NEW PART)
-        // ============================================================
+        // Step 5: Auto-load the repo (optional but nice)
         this.showToast('Loading repository from GitHub...');
-
-        // Clear current files and versions (they already have the same content, but we want to load from GitHub)
-        this.files = {};
-        this.versions = [];
-
-        const [owner, repoName] = this.github.repo.split('/');
-
         try {
+            const [owner, repoName] = this.github.repo.split('/');
+            // Clear current files and versions (they already have the same content, but we want to load from GitHub)
+            this.files = {};
+            this.versions = [];
             await this.fetchGitHubContents(owner, repoName, '');
             this.currentFolder = '';
             this.saveToStorage();
             this.updateFolderSelector();
             this.renderFileTree();
-
-            // Create checkpoint for the loaded repo
             this.createCheckpoint(`GitHub Import: ${this.github.repo} - ${new Date().toLocaleString()}`);
-
-            // Open the main HTML file if exists
             const firstHtml = Object.keys(this.files).find(f => f.endsWith('.html'));
-            if (firstHtml) {
-                this.openFile(firstHtml);
-            } else if (Object.keys(this.files).length > 0) {
-                const firstFile = Object.keys(this.files).find(f => this.files[f].type === 'file');
-                if (firstFile) this.openFile(firstFile);
-            }
-
+            if (firstHtml) this.openFile(firstHtml);
             this.showToast(`✅ Repository loaded! ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files ready.`);
-
-        } catch (error) {
-            console.error('Error loading repo:', error);
-            this.showToast('Warning: Repo created but could not auto-load. Click GitHub button to load manually.');
+        } catch (loadError) {
+            console.error('Error loading repo:', loadError);
+            this.showToast('⚠️ Repo created but could not auto-load. Click GitHub button to load manually.');
         }
 
+        // Optional chat message
         if (typeof this.addChatMessage === 'function') {
-            this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${name}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
+            this.addChatMessage(`✅ **Project Complete!**\n\nCreated "${projectName}" with ${Object.keys(this.files).filter(f => this.files[f].type === 'file').length} files and pushed to GitHub.\n\n🔗 Repository: https://github.com/${this.github.repo}`, 'ai');
         }
-
         return true;
     },
 
