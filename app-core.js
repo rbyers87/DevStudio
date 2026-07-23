@@ -139,6 +139,10 @@ const app = {
         }
 
         this.showToast('DevStudio Ready!');
+
+        // Ensure chat input is writable
+        const chatInput = document.getElementById('chat-input');
+        if (chatInput) chatInput.readOnly = false;
         setTimeout(() => this.testOllamaConnection(), 500);
 
         // Fix chat input focus
