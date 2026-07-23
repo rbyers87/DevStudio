@@ -3,6 +3,8 @@
 // INTELLIGENT VERSION - AI understands intent, no pattern matching
 // FIXED: Settings persistence for Electron
 // ADDED: Groq AI support
+// FIXED: Renamed createFile -> createFileWithAI to avoid conflict
+// FIXED: Added guard clauses for all action functions
 // ============================================================
 
 // ============================================================
@@ -561,7 +563,7 @@ app.sendMessage = async function () {
 
         switch (intent.action) {
             case 'create_file':
-                response = await this.createFile(intent);
+                response = await this.createFileWithAI(intent);
                 break;
             case 'update_file':
                 response = await this.updateFile(intent);
@@ -645,13 +647,16 @@ Respond with ONLY the JSON.`;
 // STEP 2: Execute the understood intent
 // ============================================================
 
-// CREATE FILE
-app.createFile = async function (intent) {
-    const fileName = intent.target_file;
-
-    if (!fileName || fileName === 'current file') {
-        return "I'm not sure what file name to use. Could you specify the file name (e.g., 'Create index.html')?";
+// CREATE FILE – renamed to createFileWithAI to avoid conflict with file-tree createFile
+app.createFileWithAI = async function (intent) {
+    if (!intent) {
+        return "Please specify the file you want to create and its content. Use the chat to create files, e.g., 'Create a file named index.html with a basic HTML structure.'";
     }
+    if (!intent.target_file) {
+        return "I don't know which file to create. Please specify a filename in your request.";
+    }
+
+    const fileName = intent.target_file;
 
     // Check if file already exists
     if (this.files[fileName] && this.files[fileName].type === 'file') {
@@ -689,6 +694,9 @@ Example format:
 
 // UPDATE FILE
 app.updateFile = async function (intent) {
+    if (!intent) {
+        return "Please specify which file to update and what changes to make. Use the chat to request updates.";
+    }
     let fileName = intent.target_file;
 
     if (!fileName || fileName === 'current file' || fileName === 'this file') {
@@ -734,6 +742,9 @@ Generate the COMPLETE updated file content. Respond with ONLY the new content in
 
 // DELETE FILE
 app.deleteFile = async function (intent) {
+    if (!intent) {
+        return "Please specify which file to delete. Use the chat to request deletion.";
+    }
     let fileName = intent.target_file;
 
     if (!fileName || fileName === 'current file' || fileName === 'this file') {
@@ -772,6 +783,9 @@ app.confirmDeleteFile = function (fileName) {
 
 // EXPLAIN CODE
 app.explainCode = async function (intent) {
+    if (!intent) {
+        return "Please specify which file you'd like explained. Use the chat to request an explanation.";
+    }
     let fileName = intent.target_file;
 
     if (!fileName || fileName === 'current file' || fileName === 'this file') {
@@ -801,6 +815,9 @@ Provide a clear, well-structured explanation.`;
 
 // FIX BUGS
 app.fixBugs = async function (intent) {
+    if (!intent) {
+        return "Please specify which file needs bug fixes. Use the chat to request fixes.";
+    }
     let fileName = intent.target_file;
 
     if (!fileName || fileName === 'current file' || fileName === 'this file') {
@@ -846,6 +863,9 @@ First, explain what bugs you found. Then provide the complete fixed code in a ma
 
 // OPTIMIZE CODE
 app.optimizeCode = async function (intent) {
+    if (!intent) {
+        return "Please specify which file to optimize. Use the chat to request optimization.";
+    }
     let fileName = intent.target_file;
 
     if (!fileName || fileName === 'current file' || fileName === 'this file') {
