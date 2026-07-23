@@ -1,7 +1,9 @@
 // ============================================================
 // DevStudio – app-core.js
 // Core application state, storage, initialization
-// FIXED: GitHub repo creation with better error handling and auto-load
+// FIXED: Keyboard input not working - more conservative keydown handler
+// FIXED: Robust JSON parsing for project creation
+// FIXED: Electron store fallback without errors
 // ============================================================
 
 const app = {
@@ -138,11 +140,11 @@ const app = {
             if (emptyState) emptyState.style.display = 'flex';
         }
 
-        this.showToast('DevStudio Ready!');
-
         // Ensure chat input is writable
         const chatInput = document.getElementById('chat-input');
         if (chatInput) chatInput.readOnly = false;
+
+        this.showToast('DevStudio Ready!');
         setTimeout(() => this.testOllamaConnection(), 500);
 
         // Fix chat input focus
@@ -160,6 +162,7 @@ const app = {
             }
         });
 
+        // Use a single keydown listener with explicit conditions
         window.addEventListener('keydown', (e) => {
             // Save shortcut (Ctrl+S / Cmd+S)
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -170,11 +173,8 @@ const app = {
                     this.saveToStorage();
                     this.showToast('Project saved to local storage');
                 }
+                return;
             }
-
-            // ============================================================
-            // SEARCH KEYBOARD SHORTCUTS
-            // ============================================================
 
             // Ctrl+F / Cmd+F - Open search
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
@@ -182,6 +182,7 @@ const app = {
                 if (typeof this.openEditorSearch === 'function') {
                     this.openEditorSearch();
                 }
+                return;
             }
 
             // Ctrl+H / Cmd+H - Replace mode
@@ -193,9 +194,10 @@ const app = {
                         this.toggleReplaceMode();
                     }
                 }
+                return;
             }
 
-            // F3 - Find next
+            // F3 - Find next / previous
             if (e.key === 'F3') {
                 e.preventDefault();
                 if (e.shiftKey) {
@@ -203,16 +205,21 @@ const app = {
                 } else {
                     if (typeof this.findNext === 'function') this.findNext();
                 }
+                return;
             }
 
-            // Escape - Close search
+            // Escape - Close search bar if open
             if (e.key === 'Escape') {
                 const searchBar = document.getElementById('editor-search-bar');
                 if (searchBar && searchBar.style.display === 'flex') {
                     e.preventDefault();
                     if (typeof this.closeEditorSearch === 'function') this.closeEditorSearch();
                 }
+                // Do NOT prevent default for Escape in other cases
+                return;
             }
+
+            // For any other key, do nothing (allow default behavior)
         });
 
         window.addEventListener('resize', () => {
@@ -383,7 +390,7 @@ const app = {
     },
 
     // ============================================================
-    // STORAGE
+    // STORAGE (with Electron store fallback)
     // ============================================================
 
     saveToStorage() {
@@ -398,39 +405,49 @@ const app = {
             currentFile: this.currentFile
         };
 
-        if (window.isElectron && window.require) {
+        // Try Electron store only if in Electron and require is available
+        if (window.isElectron && typeof require === 'function') {
             try {
-                const Store = window.require('electron-store');
+                const Store = require('electron-store');
                 const store = new Store();
                 store.set('devstudio-data', data);
+                return;
             } catch (e) {
-                console.error('Electron store error:', e);
-                localStorage.setItem('devstudio_data', JSON.stringify(data));
+                // electron-store not available, fallback to localStorage
+                console.log('electron-store not available, using localStorage');
             }
-        } else {
-            localStorage.setItem('devstudio_data', JSON.stringify(data));
         }
+        // Fallback to localStorage
+        localStorage.setItem('devstudio_data', JSON.stringify(data));
     },
 
     loadFromStorage() {
         let data = null;
 
-        if (window.isElectron && window.require) {
+        // Try Electron store first
+        if (window.isElectron && typeof require === 'function') {
             try {
-                const Store = window.require('electron-store');
+                const Store = require('electron-store');
                 const store = new Store();
                 const storedData = store.get('devstudio-data');
                 if (storedData) {
                     data = storedData;
                 }
             } catch (e) {
-                console.error('Electron store error:', e);
-                const raw = localStorage.getItem('devstudio_data');
-                data = raw ? JSON.parse(raw) : null;
+                console.log('electron-store not available, using localStorage');
             }
-        } else {
+        }
+
+        // If no data from Electron store, try localStorage
+        if (!data) {
             const raw = localStorage.getItem('devstudio_data');
-            data = raw ? JSON.parse(raw) : null;
+            if (raw) {
+                try {
+                    data = JSON.parse(raw);
+                } catch (e) {
+                    console.warn('Failed to parse localStorage data:', e);
+                }
+            }
         }
 
         if (data) {
@@ -477,15 +494,34 @@ Return a JSON object in this exact format:
 }
 
 Make sure the project is functional, well-structured, and includes an index.html as the entry point.
-Respond with ONLY the JSON object.`;
+Respond with ONLY the JSON object, no markdown, no extra text.`;
 
         try {
-            const response = await this.callAIWithSystemPrompt(systemPrompt, 'You are a project generator. Output only valid JSON.');
+            const response = await this.callAIWithSystemPrompt(systemPrompt, 'You are a project generator. Output only valid JSON. No markdown, no code fences.');
 
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) throw new Error('Invalid AI response format');
+            // Try to extract JSON from response
+            let jsonStr = response;
+            
+            // First, try to find JSON inside markdown code block
+            const codeBlockMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+            if (codeBlockMatch) {
+                jsonStr = codeBlockMatch[1].trim();
+            } else {
+                // Try to find first { and last }
+                const firstBrace = response.indexOf('{');
+                const lastBrace = response.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                    jsonStr = response.substring(firstBrace, lastBrace + 1);
+                }
+            }
 
-            const projectData = JSON.parse(jsonMatch[0]);
+            // Parse JSON
+            const projectData = JSON.parse(jsonStr);
+
+            // Validate structure
+            if (!projectData.files || typeof projectData.files !== 'object') {
+                throw new Error('Invalid response: missing "files" object');
+            }
 
             this.files = {};
 
@@ -518,6 +554,7 @@ Respond with ONLY the JSON object.`;
 
         } catch (error) {
             console.error('Project creation error:', error);
+            console.error('AI response was:', response); // Log response for debugging
             this.showToast(`Error creating project: ${error.message}`);
             return false;
         }
