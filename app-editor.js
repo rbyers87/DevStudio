@@ -1,6 +1,7 @@
 // ============================================================
 // DevStudio – app-editor.js
 // FIXED: Proper CDN loading for Electron
+// FIXED: Ensure fallback editor is never read-only
 // ============================================================
 
 app.initMonaco = function () {
@@ -116,6 +117,7 @@ app.setupFallbackEditor = function (fallbackEditor) {
         fallbackEditor.style.border = 'none';
         fallbackEditor.style.resize = 'none';
         fallbackEditor.style.outline = 'none';
+        fallbackEditor.readOnly = false; // Ensure it's writable
 
         // Clear existing content
         if (this.currentFile && this.files[this.currentFile]) {
@@ -156,7 +158,10 @@ app.getEditorContent = function () {
 app.setEditorContent = function (content) {
     if (this.useFallbackEditor) {
         const fallback = document.getElementById('fallback-editor');
-        if (fallback) fallback.value = content;
+        if (fallback) {
+            fallback.value = content;
+            fallback.readOnly = false;
+        }
     } else if (this.editor) {
         const language = this.currentFile ? this.getLanguage(this.currentFile) : 'javascript';
         const model = monaco.editor.createModel(content, language);
